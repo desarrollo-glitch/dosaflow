@@ -6,11 +6,12 @@ import {
     deleteDoc,
     writeBatch,
     query,
-    where
+    where,
+    getDoc
 } from 'firebase/firestore';
 import { firestoreDB } from './firebase';
-import { ManagedItem, ManagedStatus, Suggestion, Task, TaskDoc, TaskAssignmentDoc, ActivityLog, ActivityLogDoc, DailyLogDoc, DailySummaryDoc, MeetingDoc } from '../types';
-import { INITIAL_SUGGESTIONS } from '../constants';
+import { ManagedItem, ManagedStatus, Suggestion, Task, TaskDoc, TaskAssignmentDoc, ActivityLog, ActivityLogDoc, DailyLogDoc, DailySummaryDoc, MeetingDoc, UserAccessDoc, UserAccessStatus } from '../types';
+import { INITIAL_SUGGESTIONS, AUTO_APPROVED_EMAILS } from '../constants';
 
 type ManagedCollectionName = 'programmers' | 'modules' | 'platforms' | 'targets';
 
@@ -26,6 +27,7 @@ export const COLLECTIONS = {
     ACTIVITY_LOG: 'activity_log',
     DAILY_LOGS: 'daily_logs',
     MEETINGS: 'meetings',
+    USER_ACCESS: 'user_access',
 } as const;
 
 const getCollectionRef = (collectionName: string) => {
@@ -33,6 +35,9 @@ const getCollectionRef = (collectionName: string) => {
     // The structure is assumed to be: PLANIFICADOR (collection) / data (document) / {collectionName} (subcollection)
     return collection(firestoreDB, 'PLANIFICADOR', 'data', collectionName);
 };
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const emailToDocId = (email: string) => normalizeEmail(email).replace(/[^a-z0-9]/g, '_');
     
 const getDocRef = (collectionName: string, docId: string) => {
     // Firestore paths for documents must have an even number of segments.
@@ -108,6 +113,7 @@ export async function getAllData() {
         activity_log,
         daily_logs,
         meetings,
+        userAccess,
     ] = await Promise.all([
         getAllFromCollection<TaskDoc>(COLLECTIONS.TASKS),
         getAllFromCollection<TaskAssignmentDoc>(COLLECTIONS.TASK_ASSIGNMENTS),
@@ -119,6 +125,7 @@ export async function getAllData() {
         getAllFromCollection<ActivityLogDoc>(COLLECTIONS.ACTIVITY_LOG),
         getAllFromCollection<DailyLogDoc>(COLLECTIONS.DAILY_LOGS),
         getAllFromCollection<MeetingDoc>(COLLECTIONS.MEETINGS),
+        getAllFromCollection<UserAccessDoc>(COLLECTIONS.USER_ACCESS),
     ]);
     
     let suggestions = await getAllFromCollection<Suggestion>(COLLECTIONS.SUGGESTIONS);
@@ -139,6 +146,7 @@ export async function getAllData() {
         activity_log,
         daily_logs,
         meetings,
+        userAccess,
     };
 }
 
@@ -329,4 +337,34 @@ export async function deleteMeeting(docId: string) {
         console.error(`[Firestore] ERROR al intentar eliminar la reunión con ID ${docId}:`, error);
         throw error;
     }
+}
+
+export async function ensureUserAccessRecord(email: string, displayName?: string): Promise<UserAccessDoc> {
+    const normalizedEmail = normalizeEmail(email);
+    const docId = emailToDocId(normalizedEmail);
+    const docRef = getDocRef(COLLECTIONS.USER_ACCESS, docId);
+    const snapshot = await getDoc(docRef);
+    if (snapshot.exists()) {
+        return { ...(snapshot.data() as UserAccessDoc), docId };
+    }
+
+    const defaultStatus: UserAccessStatus = AUTO_APPROVED_EMAILS.some(allowed => allowed.toLowerCase() === normalizedEmail)
+        ? 'approved'
+        : 'pending';
+    const timestamp = new Date().toISOString();
+    const newRecord: Omit<UserAccessDoc, 'docId'> = {
+        id: docId,
+        email: normalizedEmail,
+        displayName: displayName || '',
+        status: defaultStatus,
+        requestedAt: timestamp,
+        updatedAt: timestamp,
+    };
+    await setDoc(docRef, newRecord);
+    return { ...newRecord, docId };
+}
+
+export async function updateUserAccessStatus(docId: string, status: UserAccessStatus) {
+    const docRef = getDocRef(COLLECTIONS.USER_ACCESS, docId);
+    await setDoc(docRef, { status, updatedAt: new Date().toISOString() }, { merge: true });
 }

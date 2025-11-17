@@ -118,3 +118,8 @@ export const INITIAL_SUGGESTIONS: Omit<Suggestion, 'id' | 'docId'>[] = Object.en
         status: 'pending' as const,
     }))
 );
+
+export const AUTO_APPROVED_EMAILS: string[] = [
+    'kikepradas@gmail.com',
+    'jojedajurado@gmail.com',
+];

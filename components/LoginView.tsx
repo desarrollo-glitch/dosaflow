@@ -1,10 +1,9 @@
 
 import React, { useState } from 'react';
-import { signUp, logIn, signInWithGoogle } from '../utils/auth';
+import { logIn, signInWithGoogle } from '../utils/auth';
 import { SpinnerIcon, GoogleIcon } from './Icons';
 
 export const LoginView: React.FC = () => {
-    const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<React.ReactNode | null>(null);
@@ -15,11 +14,7 @@ export const LoginView: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            if (isLogin) {
-                await logIn(email, password);
-            } else {
-                await signUp(email, password);
-            }
+            await logIn(email, password);
         } catch (err: any) {
             switch (err.code) {
                 case 'auth/invalid-email':
@@ -31,12 +26,6 @@ export const LoginView: React.FC = () => {
                 case 'auth/wrong-password':
                     setError('La contraseña es incorrecta.');
                     break;
-                case 'auth/email-already-in-use':
-                    setError('Este correo electrónico ya está en uso.');
-                    break;
-                case 'auth/weak-password':
-                     setError('La contraseña debe tener al menos 6 caracteres.');
-                     break;
                 default:
                     setError('Ha ocurrido un error. Por favor, inténtalo de nuevo.');
             }
@@ -56,6 +45,9 @@ export const LoginView: React.FC = () => {
                 console.error("Google Sign-In Error:", err);
                 let userMessage: React.ReactNode = 'Ha ocurrido un error al iniciar sesión con Google.';
                 switch (err.code) {
+                    case 'auth/user-not-found':
+                        userMessage = 'Este correo no está autorizado. Solicita acceso al administrador.';
+                        break;
                     case 'auth/operation-not-allowed':
                         userMessage = 'El inicio de sesión con Google no está habilitado. Por favor, actívalo en la consola de Firebase (Authentication > Sign-in method).';
                         break;
@@ -119,13 +111,9 @@ export const LoginView: React.FC = () => {
                     <div className="flex justify-center items-center mb-4">
                         <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     </div>
-                    {isLogin ? (
-                        <h2 className="text-5xl font-bold text-white font-logo tracking-wider">DosaFlow</h2>
-                    ) : (
-                        <h2 className="text-3xl font-bold text-white">Crea tu Cuenta</h2>
-                    )}
+                    <h2 className="text-5xl font-bold text-white font-logo tracking-wider">DosaFlow</h2>
                     <p className="mt-2 text-sm text-gray-400">
-                        {isLogin ? 'Accede a tu planificador de desarrollos' : 'Únete para empezar a organizar tu trabajo'}
+                        Accede a tu planificador de desarrollos
                     </p>
                 </div>
                 <form className="space-y-6" onSubmit={handleSubmit}>
@@ -167,7 +155,7 @@ export const LoginView: React.FC = () => {
                             className="group relative flex justify-center w-full py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-brand-primary hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 disabled:opacity-50 transition-all duration-300 transform hover:scale-105"
                         >
                             {loading && <SpinnerIcon className="w-5 h-5 mr-3" />}
-                            {isLogin ? 'Iniciar Sesión' : 'Registrarse'}
+                            Iniciar Sesión
                         </button>
                     </div>
                 </form>
@@ -189,16 +177,7 @@ export const LoginView: React.FC = () => {
                         className="w-full inline-flex justify-center items-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white disabled:opacity-50 transition-all duration-300 transform hover:scale-105"
                     >
                         <GoogleIcon className="w-5 h-5 mr-3" />
-                        {isLogin ? 'Iniciar Sesión con Google' : 'Registrarse con Google'}
-                    </button>
-                </div>
-                
-                <div className="text-sm text-center">
-                    <button
-                        onClick={() => { setIsLogin(!isLogin); setError(null); }}
-                        className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
-                    >
-                        {isLogin ? '¿No tienes una cuenta? Regístrate' : '¿Ya tienes una cuenta? Inicia sesión'}
+                        Iniciar Sesión con Google
                     </button>
                 </div>
             </div>

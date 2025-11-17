@@ -32,7 +32,7 @@ const NavItem: React.FC<{
 );
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSetView, isOpen }) => {
-    const utilityViews: View[] = ['dbManagement', 'filestore', 'activityLog', 'suggestions', 'documentation'];
+    const utilityViews: View[] = ['dbManagement', 'filestore', 'activityLog', 'suggestions', 'documentation', 'userAccess'];
     const isAUtilityViewActive = utilityViews.includes(currentView);
     
     const [isUtilitiesOpen, setIsUtilitiesOpen] = useState(isAUtilityViewActive);
@@ -113,6 +113,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSetView, isOpen
                 isActive={currentView === 'documentation'} 
                 icon={<BookOpenIcon />} 
                 label="Documentación"
+                isSidebarOpen={isFlyout || isOpen}
+            />
+            <NavItem 
+                onClick={() => handleUtilityViewClick('userAccess')} 
+                isActive={currentView === 'userAccess'} 
+                icon={<UsersIcon />} 
+                label="Activar usuarios"
                 isSidebarOpen={isFlyout || isOpen}
             />
         </>

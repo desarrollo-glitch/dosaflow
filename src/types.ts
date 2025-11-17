@@ -85,7 +85,19 @@ export interface Suggestion {
   category: string;
 }
 
-export type View = 'dashboard' | 'table' | 'board' | 'planner' | 'dbManagement' | 'suggestions' | 'documentation' | 'filestore' | 'activityLog' | 'dailyLog' | 'meetings';
+export type View = 'dashboard' | 'table' | 'board' | 'planner' | 'dbManagement' | 'suggestions' | 'documentation' | 'filestore' | 'activityLog' | 'dailyLog' | 'meetings' | 'userAccess';
+
+export type UserAccessStatus = 'pending' | 'approved' | 'revoked';
+
+export interface UserAccessDoc {
+  id: string;
+  docId: string;
+  email: string;
+  displayName?: string;
+  status: UserAccessStatus;
+  requestedAt: string;
+  updatedAt?: string;
+}
 
 
 // Firestore Document Types

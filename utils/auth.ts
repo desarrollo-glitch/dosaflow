@@ -1,6 +1,5 @@
 
 import {
-    createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
@@ -10,10 +9,6 @@ import {
     signInWithPopup
 } from 'firebase/auth';
 import { auth } from './firebase';
-
-export const signUp = (email: string, password: string): Promise<User> => {
-    return createUserWithEmailAndPassword(auth, email, password).then(userCredential => userCredential.user);
-};
 
 export const logIn = (email: string, password: string): Promise<User> => {
     return signInWithEmailAndPassword(auth, email, password).then(userCredential => userCredential.user);
@@ -27,7 +22,9 @@ export const onAuthStateChange = (callback: NextOrObserver<User>): (() => void) 
     return onAuthStateChanged(auth, callback);
 };
 
-export const signInWithGoogle = (): Promise<User> => {
+export const signInWithGoogle = async (): Promise<User> => {
     const provider = new GoogleAuthProvider();
-    return signInWithPopup(auth, provider).then(result => result.user);
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
 };

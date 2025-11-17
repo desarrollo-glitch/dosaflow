@@ -22,11 +22,13 @@ import { MeetingLogModal } from './components/MeetingLogModal';
 import { MeetingDetailsModal } from './components/MeetingDetailsModal';
 import { MeetingsView } from './components/MeetingsView';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { Task, Status, ManagedStatus, ManagedItem, SortConfig, FilterState, VisibilityFilters, Suggestion, Assignment, View, TaskDoc, TaskAssignmentDoc, Target, Subtask, ActivityLog, ActivityLogDoc, DailyLog, DailySummary, Attachment, Meeting, MeetingDoc } from './types';
+import { Task, Status, ManagedStatus, ManagedItem, SortConfig, FilterState, VisibilityFilters, Suggestion, Assignment, View, TaskDoc, TaskAssignmentDoc, Target, Subtask, ActivityLog, ActivityLogDoc, DailyLog, DailySummary, Attachment, Meeting, MeetingDoc, UserAccessDoc, UserAccessStatus } from './types';
 import * as firestore from './utils/firestore';
 import * as storage from './utils/storage';
 import { useAuth } from './src/contexts/AuthContext';
 import { LoginView } from './components/LoginView';
+import { PendingAccessView } from './components/PendingAccessView';
+import { UserAccessView } from './components/UserAccessView';
 import { logOut } from './utils/auth';
 // FIX: Import GenerateContentResponse for explicit API response typing.
 import { GoogleGenAI, Type, GenerateContentResponse } from '@google/genai';
@@ -36,10 +38,54 @@ import { doc, writeBatch } from 'firebase/firestore';
 
 const App: React.FC = () => {
     const { user, loading } = useAuth();
-    if (loading) {
+    const [userAccessRecord, setUserAccessRecord] = useState<UserAccessDoc | null>(null);
+    const [isAccessLoading, setIsAccessLoading] = useState(false);
+
+    useEffect(() => {
+        let isMounted = true;
+        if (!user || !user.email) {
+            setUserAccessRecord(null);
+            setIsAccessLoading(false);
+            return;
+        }
+        setIsAccessLoading(true);
+        firestore.ensureUserAccessRecord(user.email, user.displayName || user.email)
+            .then(record => {
+                if (isMounted) {
+                    setUserAccessRecord(record);
+                }
+            })
+            .catch(error => {
+                console.error('Error checking user access:', error);
+                if (isMounted) {
+                    setUserAccessRecord(null);
+                }
+            })
+            .finally(() => {
+                if (isMounted) {
+                    setIsAccessLoading(false);
+                }
+            });
+        return () => {
+            isMounted = false;
+        };
+    }, [user]);
+
+    if (loading || isAccessLoading) {
         return <LoadingScreen />;
     }
-    return user ? <AppContent /> : <LoginView />;
+    if (!user) {
+        return <LoginView />;
+    }
+    if (!userAccessRecord) {
+        return <PendingAccessView email={user.email ?? undefined} status="pending" />;
+    }
+
+    if (userAccessRecord.status !== 'approved') {
+        return <PendingAccessView email={user.email ?? undefined} status={userAccessRecord.status} />;
+    }
+
+    return <AppContent />;
 };
 
 const customProgrammerOrder = [
@@ -59,6 +105,8 @@ const AppContent: React.FC = () => {
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [userAccessRequests, setUserAccessRequests] = useState<UserAccessDoc[]>([]);
+  const [userAccessActionId, setUserAccessActionId] = useState<string | null>(null);
   
   // Raw Firestore data
   const [taskDocs, setTaskDocs] = useState<TaskDoc[]>([]);
@@ -175,6 +223,7 @@ const AppContent: React.FC = () => {
             setActivityLog(data.activity_log);
             setDailyLogs(data.daily_logs);
             setMeetings(joinedMeetings);
+            setUserAccessRequests(data.userAccess || []);
 
             setTasks(joinedTasks);
         } catch (error) {
@@ -188,6 +237,12 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         refreshData();
     }, [refreshData]);
+
+    useEffect(() => {
+        if (currentView === 'userAccess') {
+            refreshData();
+        }
+    }, [currentView, refreshData]);
 
     useEffect(() => {
         if (isDarkMode) {
@@ -596,6 +651,23 @@ const AppContent: React.FC = () => {
         setPlannerModalContext({ programmer, month });
         setIsPlannerModalOpen(true);
     };
+
+    const handleUpdateUserAccess = async (docId: string, status: UserAccessStatus) => {
+        setUserAccessActionId(docId);
+        try {
+            await firestore.updateUserAccessStatus(docId, status);
+            await refreshData();
+            showNotification('Acceso actualizado', status === 'approved' ? 'El usuario ahora puede acceder a la aplicación.' : 'El usuario ha sido revocado.');
+        } catch (error) {
+            console.error('Error updating user access:', error);
+            showNotification('Error', 'No se pudo actualizar el acceso del usuario.');
+        } finally {
+            setUserAccessActionId(null);
+        }
+    };
+
+    const handleApproveUserAccess = (docId: string) => handleUpdateUserAccess(docId, 'approved');
+    const handleRevokeUserAccess = (docId: string) => handleUpdateUserAccess(docId, 'revoked');
 
     const handleAssignToPlanner = async (taskIds: string[]) => {
         if (!plannerModalContext) return;
@@ -1047,6 +1119,15 @@ ${meetingNotes}
                             onOpenMeetingDetailsModal={handleOpenMeetingDetailsModal}
                             onUpdateMeeting={handleUpdateMeeting}
                         />;
+            case 'userAccess':
+                return (
+                    <UserAccessView
+                        requests={userAccessRequests}
+                        processingId={userAccessActionId}
+                        onApprove={handleApproveUserAccess}
+                        onRevoke={handleRevokeUserAccess}
+                    />
+                );
             case 'dashboard':
             default:
                 return <DashboardView tasks={tasks} programmers={programmers} modules={modules} managedStatuses={managedStatuses} statusConfig={allItemsConfig} />;
