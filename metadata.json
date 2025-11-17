@@ -1,0 +1,5 @@
+{
+  "name": "Planificador de Desarrollos",
+  "description": "A comprehensive Kanban-style project management tool designed for software development teams. It allows for easy planning, tracking of requirements, and management of developer assignments across various modules and platforms.",
+  "requestFramePermissions": []
+}
