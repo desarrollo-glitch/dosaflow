@@ -3,7 +3,6 @@ import { DailyLog, ManagedItem, Meeting, Task } from '../types';
 import { DailyLogModal } from './DailyLogModal';
 import { DailySummaryModal } from './DailySummaryModal';
 import { EditIcon, PlusIcon, ChatBubbleLeftRightIcon } from './Icons';
-import { marked } from 'marked';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -62,6 +61,25 @@ const isColorLight = (colorString: string) => {
     return luminance > 0.5;
 };
 
+type ParsedLogLine = { label: string; completed: boolean };
+
+const parseLogLines = (text: string): ParsedLogLine[] => {
+    return text
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map(line => {
+            const normalized = line.toLowerCase();
+            const isDone = normalized.startsWith('- [x]') || normalized.startsWith('[x]') || normalized.startsWith('✅');
+            const label = line.replace(/^- \[(x| )\]\s*/i, '').replace(/^\[(x| )\]\s*/i, '').replace(/^✅\s*/, '').trim();
+            return { label: label || line, completed: isDone };
+        });
+};
+
+const reconstructLogText = (lines: ParsedLogLine[]) => {
+    return lines.map(l => `- [${l.completed ? 'x' : ' '}] ${l.label}`).join('\n');
+};
+
 
 export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLogs, meetings, tasks, onSaveLog, onProcessSummary, onDeleteLog, onOpenMeetingModal, onOpenMeetingDetailsModal }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -97,6 +115,15 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
     const handleSaveLog = (log: Omit<DailyLog, 'id' | 'docId'>) => {
         onSaveLog(log);
         setLogModalState({ isOpen: false, date: '', programmer: null, initialText: '' });
+    };
+
+    const handleToggleLogLine = (date: string, programmerId: string, index: number) => {
+        const currentLogText = dailyLogsMap.get(`${date}_${programmerId}`) || '';
+        const parsed = parseLogLines(currentLogText);
+        if (!parsed[index]) return;
+        const updated = parsed.map((line, i) => i === index ? { ...line, completed: !line.completed } : line);
+        const newText = reconstructLogText(updated);
+        onSaveLog({ date, programmerId, text: newText });
     };
     
     const handleDeleteLog = async (date: string, programmerId: string) => {
@@ -320,16 +347,32 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
                                     </div>
                                 ))}
                                 {programmersWithLogs.map(p => {
-                                    const logText = dailyLogsMap.get(`${dateStr}_${p.id}`);
+                                    const logText = dailyLogsMap.get(`${dateStr}_${p.id}`) || '';
+                                    const logLines = parseLogLines(logText);
                                     return (
-                                        <div key={p.id} onClick={() => handleOpenLogModal(dateStr, p)} className="p-2 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50">
+                                        <div key={p.id} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50">
                                             <div className="flex items-center">
                                                 <span className="w-3 h-3 rounded-full mr-2 flex-shrink-0" style={{ backgroundColor: p.color }}></span>
-                                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{p.name}</p>
+                                                <button onClick={() => handleOpenLogModal(dateStr, p)} className="text-left text-sm font-semibold text-gray-700 dark:text-gray-200 hover:underline">
+                                                    {p.name}
+                                                </button>
                                             </div>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 pl-5 truncate">
-                                                {logText}
-                                            </p>
+                                            <div className="mt-2 space-y-1">
+                                                {logLines.length === 0 && (
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500 pl-5 italic">Sin tareas registradas.</p>
+                                                )}
+                                                {logLines.map((line, idx) => (
+                                                    <label key={`${p.id}-${idx}`} className="flex items-start space-x-2 text-xs text-gray-700 dark:text-gray-200 pl-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={line.completed}
+                                                            onChange={() => handleToggleLogLine(dateStr, p.id, idx)}
+                                                            className="mt-[2px] h-3.5 w-3.5 text-brand-primary rounded border-gray-300 focus:ring-brand-primary"
+                                                        />
+                                                        <span className={line.completed ? 'line-through text-gray-400 dark:text-gray-500' : ''}>{line.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -422,29 +465,8 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
                  )}
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {programmersWithLogs.map(p => {
-                        const logText = dailyLogsMap.get(`${dateStr}_${p.id}`);
-                        
-                        // Convert plain text lines into a markdown list for better readability
-                        const processedLogText = logText
-                            ? logText
-                                // First, add newlines for sentences, avoiding common false positives like URLs or initials.
-                                .replace(/\.\s+(?=[A-ZÀ-ÖØ-öø-ÿ])/g, '.\n')
-                                // Then, split by any newline character.
-                                .split('\n')
-                                .filter(line => line.trim() !== '')
-                                .map(line => {
-                                    const trimmedLine = line.trim();
-                                    // If the user is already writing in markdown, respect it.
-                                    if (trimmedLine.startsWith('* ') || trimmedLine.startsWith('- ') || /^\d+\.\s/.test(trimmedLine)) {
-                                        return line;
-                                    }
-                                    return `* ${trimmedLine}`;
-                                })
-                                .join('\n')
-                            : '';
-                        
-                        const rawHtml = processedLogText ? marked(processedLogText) : '';
-                        const renderedHtml = rawHtml.replace('<ul>', '<ul class="divide-y divide-blue-200 dark:divide-gray-700">');
+                        const logText = dailyLogsMap.get(`${dateStr}_${p.id}`) || '';
+                        const logLines = parseLogLines(logText);
                         
                         return (
                             <div key={p.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-5 flex flex-col">
@@ -457,8 +479,21 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
                                         <EditIcon className="w-5 h-5"/>
                                     </button>
                                 </div>
-                                <div className="prose prose-sm dark:prose-invert text-gray-600 dark:text-gray-300 flex-grow min-h-[100px]">
-                                    {logText && <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />}
+                                <div className="flex-grow min-h-[100px] space-y-2">
+                                    {logLines.length === 0 && (
+                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic">Sin tareas registradas.</p>
+                                    )}
+                                    {logLines.map((line, idx) => (
+                                        <label key={`${p.id}-${idx}`} className="flex items-start space-x-3 text-sm text-gray-700 dark:text-gray-200">
+                                            <input
+                                                type="checkbox"
+                                                checked={line.completed}
+                                                onChange={() => handleToggleLogLine(dateStr, p.id, idx)}
+                                                className="mt-[3px] h-4 w-4 text-brand-primary rounded border-gray-300 focus:ring-brand-primary"
+                                            />
+                                            <span className={line.completed ? 'line-through text-gray-400 dark:text-gray-500' : ''}>{line.label}</span>
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
                         );

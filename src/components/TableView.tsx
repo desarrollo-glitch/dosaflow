@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Task, Status, ManagedItem, ManagedStatus, SortConfig, FilterState, VisibilityFilters } from '../types';
-import { EditIcon, LinkIcon, PaperclipIcon, SortIndicatorIcon } from './Icons';
+import { DocumentIcon, EditIcon, GoogleDriveIcon, LinkIcon, PaperclipIcon, SortIndicatorIcon } from './Icons';
 import { EditableTag } from './EditableTag';
 import { EditableText } from './EditableText';
 import { TableToolbar } from './TableToolbar';
@@ -91,6 +91,12 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         allModules,
         allProgrammers
     } = props;
+
+    const renderAttachmentIcon = (att: Task['attachments'][number]) => {
+        if (att.source === 'drive') return <GoogleDriveIcon className="w-4 h-4 text-green-600" />;
+        if (att.type === 'link') return <LinkIcon className="w-4 h-4 text-blue-500" />;
+        return <DocumentIcon className="w-4 h-4 text-gray-500" />;
+    };
 
   const FilterInput: React.FC<{ filterKey: keyof Task | 'programmers' }> = ({ filterKey }) => (
     <input
@@ -184,10 +190,29 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     <SubtaskProgress subtasks={task.subtasks} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                  {task.attachments && task.attachments.length > 0 && (
-                    <div className="flex items-center space-x-1 text-gray-600 dark:text-gray-400">
+                  {task.attachments && task.attachments.length > 0 ? (
+                    <div className="flex items-center gap-2 flex-wrap max-w-xs">
+                      {task.attachments.slice(0, 3).map(att => (
+                        <a
+                          key={att.id}
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={att.name}
+                          className="flex items-center space-x-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors max-w-[150px]"
+                        >
+                          {renderAttachmentIcon(att)}
+                          <span className="truncate">{att.name}</span>
+                        </a>
+                      ))}
+                      {task.attachments.length > 3 && (
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">+{task.attachments.length - 3} más</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-1 text-gray-400 dark:text-gray-600">
                       <PaperclipIcon className="w-4 h-4" />
-                      <span>{task.attachments.length}</span>
+                      <span className="text-xs">-</span>
                     </div>
                   )}
                 </td>

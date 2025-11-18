@@ -22,6 +22,8 @@ interface TaskModalProps {
   onAddLinkAttachment: (taskId: string, url: string, name: string) => void;
   onUpdateAttachment: (taskId: string, attachment: Attachment) => void;
   onDeleteAttachment: (taskId: string, attachment: Attachment) => void;
+  onAddDriveAttachment: (taskId: string) => void;
+  isDriveReady: boolean;
 }
 
 const isColorLight = (colorString: string) => {
@@ -44,7 +46,7 @@ const isColorLight = (colorString: string) => {
     return luminance > 0.5;
 };
 
-export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, programmers: allProgrammers, taskToEdit, modules, platforms, targets, managedStatuses, onAddSubtask, onUpdateSubtask, onDeleteSubtask, onAddFileAttachment, onAddLinkAttachment, onUpdateAttachment, onDeleteAttachment }) => {
+export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, programmers: allProgrammers, taskToEdit, modules, platforms, targets, managedStatuses, onAddSubtask, onUpdateSubtask, onDeleteSubtask, onAddFileAttachment, onAddLinkAttachment, onUpdateAttachment, onDeleteAttachment, onAddDriveAttachment, isDriveReady }) => {
   const [requirement, setRequirement] = useState('');
   const [module, setModule] = useState('');
   const [target, setTarget] = useState<Target>('web');
@@ -59,6 +61,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, p
   
   // State for attachments
   const [isUploading, setIsUploading] = useState(false);
+  const [isLinkingDrive, setIsLinkingDrive] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkName, setLinkName] = useState('');
@@ -70,6 +73,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, p
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isEditing = taskToEdit !== null;
+
+  const getAttachmentIcon = (att: Attachment) => {
+      if (att.source === 'drive') return <GoogleDriveIcon className="w-5 h-5 text-green-500 flex-shrink-0" />;
+      if (att.type === 'link') return <LinkIcon className="w-5 h-5 text-blue-500 flex-shrink-0" />;
+      return <DocumentIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />;
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -117,6 +126,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, p
         setLinkUrl('');
         setLinkName('');
         setEditingAttachment(null);
+        setIsUploading(false);
+        setIsLinkingDrive(false);
     }
   }, [isOpen, taskToEdit, isEditing, modules, platforms, targets, managedStatuses]);
 
@@ -153,6 +164,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, p
       }
       // Reset file input
       if(fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDriveAttachment = async () => {
+      if (!taskToEdit) return;
+      setIsLinkingDrive(true);
+      try {
+          await onAddDriveAttachment(taskToEdit.id);
+      } finally {
+          setIsLinkingDrive(false);
+      }
   };
 
   const handleSaveAttachment = () => {
@@ -316,15 +337,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, p
                                         {isUploading ? <SpinnerIcon className="w-5 h-5"/> : <UploadIcon className="w-5 h-5"/>}
                                         <span>Subir Archivo</span>
                                     </button>
-                                     <button type="button" onClick={() => alert('La integración con Google Drive estará disponible próximamente.')} className="text-sm flex items-center justify-center space-x-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-semibold rounded-md px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
-                                        <GoogleDriveIcon className="w-5 h-5"/>
-                                        <span className="hidden sm:inline">Google Drive</span>
+                                    <button type="button" onClick={handleDriveAttachment} disabled={!isDriveReady || isLinkingDrive} className="text-sm flex items-center justify-center space-x-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-semibold rounded-md px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50">
+                                        {isLinkingDrive ? <SpinnerIcon className="w-5 h-5" /> : <GoogleDriveIcon className="w-5 h-5"/>}
+                                        <span className="hidden sm:inline">{isDriveReady ? 'Google Drive' : 'Configurar Drive'}</span>
                                     </button>
                                     <button type="button" onClick={() => setShowLinkInput(true)} className="text-sm flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md px-3 py-2 transition-colors">
                                         <LinkIcon className="w-5 h-5"/>
                                         <span className="hidden sm:inline">Añadir Enlace</span>
                                     </button>
                                 </div>
+                            )}
+
+                            {!isDriveReady && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">Añade las variables VITE_GOOGLE_API_KEY y VITE_GOOGLE_CLIENT_ID para habilitar Drive.</p>
                             )}
 
                             {showLinkInput && (
@@ -350,8 +375,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, p
                                                 </div>
                                             ) : (
                                                 <div className="flex items-center space-x-2 truncate">
-                                                    {att.type === 'link' ? <LinkIcon className="w-5 h-5 text-blue-500 flex-shrink-0" /> : <DocumentIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />}
-                                                    <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-800 dark:text-gray-200 truncate hover:underline" title={att.name}>{att.name}</a>
+                                                    {getAttachmentIcon(att)}
+                                                    <div className="flex flex-col min-w-0">
+                                                        <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-800 dark:text-gray-200 truncate hover:underline" title={att.name}>{att.name}</a>
+                                                        <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 truncate">
+                                                            {att.source === 'drive' ? 'Google Drive' : att.type === 'file' ? (att.fileType || 'Archivo') : 'Enlace'}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             )}
                                             <div className="flex items-center space-x-2 ml-2">

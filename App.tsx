@@ -30,6 +30,7 @@ import { LoginView } from './components/LoginView';
 import { PendingAccessView } from './components/PendingAccessView';
 import { UserAccessView } from './components/UserAccessView';
 import { logOut } from './utils/auth';
+import { pickDriveFile } from './utils/drive';
 // FIX: Import GenerateContentResponse for explicit API response typing.
 import { GoogleGenAI, Type, GenerateContentResponse } from '@google/genai';
 // FIX: Import firestoreDB and writeBatch for batch database operations.
@@ -95,6 +96,8 @@ const customProgrammerOrder = [
 ];
 
 const AppContent: React.FC = () => {
+  const googlePickerClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  const googlePickerApiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
   // View models for UI
   const [tasks, setTasks] = useState<Task[]>([]);
   const [programmers, setProgrammers] = useState<ManagedItem[]>([]);
@@ -499,6 +502,7 @@ const AppContent: React.FC = () => {
                 type: 'file',
                 fileType: type,
                 storagePath: path,
+                source: 'upload',
                 createdAt: new Date().toISOString()
             };
             const updatedAttachments = [...(task.attachments || []), newAttachment];
@@ -519,6 +523,7 @@ const AppContent: React.FC = () => {
             name,
             url,
             type: 'link',
+            source: 'external',
             createdAt: new Date().toISOString()
         };
         const updatedAttachments = [...(task.attachments || []), newAttachment];
@@ -527,6 +532,45 @@ const AppContent: React.FC = () => {
             await handleAddActivityLog('Adjunto Añadido', tasks.find(t => t.id === taskId)!, `Se añadió el enlace: "${name}".`);
             await refreshData();
         } catch (e) { console.error(e); }
+    };
+
+    const handleAddDriveAttachment = async (taskId: string) => {
+        const task = taskDocs.find(t => t.id === taskId);
+        if (!task) return;
+
+        if (!googlePickerClientId || !googlePickerApiKey) {
+            showNotification('Config requerida', 'Configura VITE_GOOGLE_CLIENT_ID y VITE_GOOGLE_API_KEY para usar Google Drive.');
+            return;
+        }
+
+        try {
+            const driveFile = await pickDriveFile({
+                apiKey: googlePickerApiKey,
+                clientId: googlePickerClientId,
+            });
+
+            const newAttachment: Attachment = {
+                id: Date.now().toString(),
+                name: driveFile.name,
+                url: driveFile.url,
+                type: 'link',
+                fileType: driveFile.mimeType,
+                source: 'drive',
+                createdAt: new Date().toISOString(),
+            };
+
+            const updatedAttachments = [...(task.attachments || []), newAttachment];
+            await firestore.updateTaskDoc(taskId, { attachments: updatedAttachments });
+            await handleAddActivityLog('Adjunto Añadido', tasks.find(t => t.id === taskId)!, `Se vinculó un archivo de Drive: "${driveFile.name}".`);
+            await refreshData();
+            showNotification('Google Drive', 'Archivo vinculado correctamente.');
+        } catch (error: any) {
+            if (error?.message === 'Selección cancelada') {
+                return;
+            }
+            console.error('Error al vincular Drive', error);
+            showNotification('Error', 'No se pudo vincular el archivo de Google Drive.');
+        }
     };
 
     const handleUpdateAttachment = async (taskId: string, attachment: Attachment) => {
@@ -1200,6 +1244,8 @@ ${meetingNotes}
             onAddLinkAttachment={handleAddLinkAttachment}
             onUpdateAttachment={handleUpdateAttachment}
             onDeleteAttachment={handleDeleteAttachment}
+            onAddDriveAttachment={handleAddDriveAttachment}
+            isDriveReady={Boolean(googlePickerClientId && googlePickerApiKey)}
           />
            <PlannerTaskSelectorModal 
                 isOpen={isPlannerModalOpen}
