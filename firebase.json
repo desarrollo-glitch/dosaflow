@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "dosatic",
     "public": "dist",
     "ignore": [
       "firebase.json",
