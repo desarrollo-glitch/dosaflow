@@ -135,6 +135,7 @@ const AppContent: React.FC = () => {
     message: React.ReactNode;
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  const defaultStatusFilterApplied = useRef(false);
 
   const { user } = useAuth();
 
@@ -248,6 +249,13 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         refreshData();
     }, [refreshData]);
+
+    useEffect(() => {
+        if (defaultStatusFilterApplied.current || managedStatuses.length === 0) return;
+        const nonFinalizedStatuses = managedStatuses.map(status => status.name).filter(name => name !== 'Finalizado');
+        setVisibilityFilters(prev => ({ ...prev, status: nonFinalizedStatuses }));
+        defaultStatusFilterApplied.current = true;
+    }, [managedStatuses]);
 
     useEffect(() => {
         if (currentView === 'userAccess') {
