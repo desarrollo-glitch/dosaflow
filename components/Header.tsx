@@ -1,5 +1,5 @@
 import React from 'react';
-import { MenuIcon, UploadIcon, ExportIcon, UserIcon } from './Icons';
+import { MenuIcon, ExportIcon } from './Icons';
 import type { User } from 'firebase/auth';
 
 interface HeaderProps {

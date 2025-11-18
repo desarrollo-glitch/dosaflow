@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Task, Status, ManagedItem } from '../types';
 import { PlusIcon, LinkIcon, WebAppIcon, MobileIcon, PaperclipIcon } from './Icons';
 import { SubtaskProgress } from './SubtaskProgress';
@@ -111,6 +111,8 @@ const TaskPill: React.FC<{
         default: targetIcon = null;
     }
     
+    const borderColor = allItemsConfig[task.status]?.color || '#e5e7eb';
+
     return (
         <div
             style={{ position: 'absolute', top, left, width, minHeight: '3.5rem' }}
@@ -122,6 +124,7 @@ const TaskPill: React.FC<{
                 onDragEnd={handleDragEnd}
                 onClick={() => onEdit(task)}
                 className="h-full text-left text-xs shadow-md group-hover:shadow-lg flex flex-col rounded overflow-hidden relative cursor-grab active:cursor-grabbing"
+                style={{ border: `1px solid ${borderColor}` }}
                 title={`${task.requirement} (${task.module})`}
             >
                  {/* Left Resize Handle */}

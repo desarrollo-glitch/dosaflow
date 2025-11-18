@@ -1,6 +1,6 @@
 import React from 'react';
 import { Meeting, Task, ManagedItem } from '../types';
-import { EditIcon, PrinterIcon, CheckBadgeIcon, UsersIcon } from './Icons';
+import { EditIcon, CheckBadgeIcon, UsersIcon } from './Icons';
 
 interface MeetingCardProps {
     meeting: Meeting;

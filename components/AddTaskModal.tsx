@@ -22,6 +22,8 @@ interface TaskModalProps {
   onAddLinkAttachment: (taskId: string, url: string, name: string) => void;
   onUpdateAttachment: (taskId: string, attachment: Attachment) => void;
   onDeleteAttachment: (taskId: string, attachment: Attachment) => void;
+  onAddDriveAttachment?: (taskId: string) => void;
+  isDriveReady?: boolean;
 }
 
 const isColorLight = (colorString: string) => {
@@ -237,7 +239,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, p
                       <label htmlFor="requirement" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Necesidad</label>
                       <input type="text" id="requirement" value={requirement} onChange={e => setRequirement(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-brand-primary focus:border-brand-primary bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 dark:placeholder-gray-400"/>
                   </div>
-                  <TagSelector label="Tipo" options={REQUIREMENT_TYPE_OPTIONS} selectedValue={requirementType} onSelect={setRequirementType} />
+                  <TagSelector label="Tipo" options={[...REQUIREMENT_TYPE_OPTIONS]} selectedValue={requirementType} onSelect={setRequirementType} />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <TagSelector label="Módulo" options={modules} selectedValue={module} onSelect={setModule} />
                     <TagSelector label="Plataforma" options={platforms} selectedValue={platform} onSelect={setPlatform} />

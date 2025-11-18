@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Suggestion } from '../types';
-import { SparklesIcon, XIcon, CheckIcon } from './Icons';
+import { SparklesIcon, CheckIcon } from './Icons';
 
 interface ApplySuggestionModalProps {
     isOpen: boolean;

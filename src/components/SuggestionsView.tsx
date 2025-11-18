@@ -79,3 +79,5 @@ export const SuggestionsView: React.FC<SuggestionsViewProps> = ({ suggestions, o
                 </div>
             ))}
         </div>
+    );
+};

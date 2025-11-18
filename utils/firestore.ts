@@ -10,7 +10,7 @@ import {
     getDoc
 } from 'firebase/firestore';
 import { firestoreDB } from './firebase';
-import { ManagedItem, ManagedStatus, Suggestion, Task, TaskDoc, TaskAssignmentDoc, ActivityLog, ActivityLogDoc, DailyLogDoc, DailySummaryDoc, MeetingDoc, UserAccessDoc, UserAccessStatus } from '../types';
+import { ManagedItem, ManagedStatus, Suggestion, TaskDoc, TaskAssignmentDoc, ActivityLog, ActivityLogDoc, DailyLogDoc, MeetingDoc, UserAccessDoc, UserAccessStatus } from '../types';
 import { DEFAULT_REQUIREMENT_TYPE } from '../constants';
 import { INITIAL_SUGGESTIONS, AUTO_APPROVED_EMAILS } from '../constants';
 

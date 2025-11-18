@@ -1,6 +1,7 @@
 export type Status = 'Sin asignar' | 'Asignado' | 'En proceso' | 'Retrasado' | 'En testeo' | 'Finalizado' | 'Descartado' | string;
 
 export type Target = 'web' | 'app' | 'ambos' | string;
+export type RequirementType = 'Desarrollo' | 'Seguimiento' | string;
 
 export interface Assignment {
   programmerName: string;
@@ -77,6 +78,7 @@ export interface VisibilityFilters {
   status: string[];
   module: string[];
   programmer: string[];
+  requirementType: string[];
 }
 
 export interface Suggestion {

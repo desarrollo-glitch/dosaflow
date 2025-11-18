@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { Task, Target } from '../types';
-import { DocumentIcon, EditIcon, MobileIcon, PaperclipIcon, PlatformIcon, UserIcon, WebAppIcon } from './Icons';
+import { Task } from '../types';
+import { EditIcon, MobileIcon, PaperclipIcon, PlatformIcon, UserIcon, WebAppIcon } from './Icons';
 import { SubtaskProgress } from './SubtaskProgress';
 
 interface KanbanCardProps {

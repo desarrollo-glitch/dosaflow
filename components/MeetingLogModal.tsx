@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Task, ManagedItem } from '../types';
-import { SpinnerIcon, XIcon, UserIcon } from './Icons';
+import { SpinnerIcon, XIcon } from './Icons';
 
 interface MeetingLogModalProps {
     isOpen: boolean;

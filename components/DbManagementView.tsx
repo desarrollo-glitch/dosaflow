@@ -7,27 +7,27 @@ import { ManagedStatus, ManagedItem } from '../types';
 
 interface DbManagementViewProps {
     programmers: ManagedItem[];
-    onProgrammerAdd: (item: Omit<ManagedItem, 'id' | 'userId'>) => Promise<void>;
+    onProgrammerAdd: (item: Omit<ManagedItem, 'id' | 'docId'>) => Promise<void>;
     onProgrammerUpdate: (item: ManagedItem) => Promise<void>;
     onProgrammerDelete: (item: ManagedItem) => void;
     
     modules: ManagedItem[];
-    onModuleAdd: (item: Omit<ManagedItem, 'id' | 'userId'>) => Promise<void>;
+    onModuleAdd: (item: Omit<ManagedItem, 'id' | 'docId'>) => Promise<void>;
     onModuleUpdate: (item: ManagedItem) => Promise<void>;
     onModuleDelete: (item: ManagedItem) => void;
 
     platforms: ManagedItem[];
-    onPlatformAdd: (item: Omit<ManagedItem, 'id' | 'userId'>) => Promise<void>;
+    onPlatformAdd: (item: Omit<ManagedItem, 'id' | 'docId'>) => Promise<void>;
     onPlatformUpdate: (item: ManagedItem) => Promise<void>;
     onPlatformDelete: (item: ManagedItem) => void;
 
     targets: ManagedItem[];
-    onTargetAdd: (item: Omit<ManagedItem, 'id' | 'userId'>) => Promise<void>;
+    onTargetAdd: (item: Omit<ManagedItem, 'id' | 'docId'>) => Promise<void>;
     onTargetUpdate: (item: ManagedItem) => Promise<void>;
     onTargetDelete: (item: ManagedItem) => void;
 
     managedStatuses: ManagedStatus[];
-    onStatusAdd: (item: Omit<ManagedStatus, 'id' | 'userId'>) => Promise<void>;
+    onStatusAdd: (item: Omit<ManagedStatus, 'id' | 'docId'>) => Promise<void>;
     onStatusUpdate: (item: ManagedStatus) => Promise<void>;
     onStatusDelete: (item: ManagedStatus) => void;
 }

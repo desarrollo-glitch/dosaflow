@@ -54,7 +54,7 @@ export const StyleguideView: React.FC = () => {
             const tag = ordered ? 'ol' : 'ul';
             return `<${tag} class="list-disc list-inside my-4 pl-4 space-y-2">${body}</${tag}>`;
         };
-        renderer.code = (code, language) => {
+        renderer.code = (code) => {
             return `<pre class="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto text-sm my-4"><code>${code}</code></pre>`;
         };
         renderer.strong = (text) => `<strong class="font-semibold text-gray-800 dark:text-gray-200">${text}</strong>`;

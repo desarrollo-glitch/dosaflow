@@ -22,7 +22,7 @@ import { MeetingLogModal } from './components/MeetingLogModal';
 import { MeetingDetailsModal } from './components/MeetingDetailsModal';
 import { MeetingsView } from './components/MeetingsView';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { Task, Status, ManagedStatus, ManagedItem, SortConfig, FilterState, VisibilityFilters, Suggestion, Assignment, View, TaskDoc, TaskAssignmentDoc, Target, Subtask, ActivityLog, ActivityLogDoc, DailyLog, DailySummary, Attachment, Meeting, MeetingDoc, UserAccessDoc, UserAccessStatus, RequirementType } from './types';
+import { Task, Status, ManagedStatus, ManagedItem, SortConfig, FilterState, VisibilityFilters, Suggestion, Assignment, View, TaskDoc, TaskAssignmentDoc, Target, Subtask, ActivityLog, Attachment, Meeting, MeetingDoc, UserAccessDoc, UserAccessStatus, RequirementType, DailyLog } from './types';
 import * as firestore from './utils/firestore';
 import * as storage from './utils/storage';
 import { useAuth } from './src/contexts/AuthContext';
@@ -33,9 +33,6 @@ import { logOut } from './utils/auth';
 import { pickDriveFile } from './utils/drive';
 // FIX: Import GenerateContentResponse for explicit API response typing.
 import { GoogleGenAI, Type, GenerateContentResponse } from '@google/genai';
-// FIX: Import firestoreDB and writeBatch for batch database operations.
-import { firestoreDB } from './utils/firebase';
-import { doc, writeBatch } from 'firebase/firestore';
 import { DEFAULT_REQUIREMENT_TYPE, REQUIREMENT_TYPE_OPTIONS, REQUIREMENT_TYPES } from './constants';
 
 const App: React.FC = () => {
@@ -139,6 +136,7 @@ const AppContent: React.FC = () => {
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   const defaultStatusFilterApplied = useRef(false);
+  const defaultVisibilityApplied = useRef(false);
 
   const { user } = useAuth();
 
@@ -261,6 +259,18 @@ const AppContent: React.FC = () => {
     }, [managedStatuses]);
 
     useEffect(() => {
+        if (defaultVisibilityApplied.current) return;
+        if (modules.length === 0 || programmers.length === 0 || targets.length === 0) return;
+        setVisibilityFilters({
+            status: visibilityFilters.status.length ? visibilityFilters.status : managedStatuses.map(s => s.name).filter(name => name !== 'Finalizado'),
+            module: modules.map(m => m.name),
+            programmer: programmers.map(p => p.name),
+            requirementType: REQUIREMENT_TYPE_OPTIONS.map(t => t.name),
+        });
+        defaultVisibilityApplied.current = true;
+    }, [modules, programmers, targets, managedStatuses, visibilityFilters.status.length]);
+
+    useEffect(() => {
         if (currentView === 'userAccess') {
             refreshData();
         }
@@ -352,17 +362,20 @@ const AppContent: React.FC = () => {
             const savedTask = { ...taskData, id: savedTaskId } as Task;
             
             if (isEditing && originalTask) {
-                const changes = Object.keys(taskData).map(key => {
-                    const typedKey = key as keyof Task;
-                    if (typedKey === 'assignments') {
-                         const oldNames = originalTask.assignments.map(a => a.programmerName).sort().join(', ');
-                         const newNames = taskData.assignments.map(a => a.programmerName).sort().join(', ');
-                         if (oldNames !== newNames) return `Programadores: de '${oldNames}' a '${newNames}'`;
-                    } else if (String(originalTask[typedKey]) !== String(taskData[typedKey])) {
-                        return `${key}: de '${originalTask[typedKey]}' a '${taskData[typedKey]}'`;
-                    }
-                    return null;
-                }).filter(Boolean).join('; ');
+                const fieldsToCompare: (keyof Task)[] = ['requirement', 'requirementType', 'module', 'platform', 'target', 'status', 'startDate', 'link'];
+                const changes = [
+                    (() => {
+                        const oldNames = originalTask.assignments.map(a => a.programmerName).sort().join(', ');
+                        const newNames = taskData.assignments.map(a => a.programmerName).sort().join(', ');
+                        return oldNames !== newNames ? `Programadores: de '${oldNames}' a '${newNames}'` : null;
+                    })(),
+                    ...fieldsToCompare.map(key => {
+                        const oldVal = originalTask[key];
+                        // @ts-expect-error safe access for taskData fields subset
+                        const newVal = taskData[key];
+                        return String(oldVal) !== String(newVal) ? `${String(key)}: de '${oldVal}' a '${newVal}'` : null;
+                    })
+                ].filter(Boolean).join('; ');
                 
                 if (changes) {
                     await handleAddActivityLog('Requisito Actualizado', savedTask, changes);
@@ -403,8 +416,6 @@ const AppContent: React.FC = () => {
         if (!task) return;
 
         const { programmers: newProgrammerNames, ...otherFields } = updatedFields;
-        // FIX: Correctly instantiate a write batch with the firestore database instance.
-        const batch = writeBatch(firestoreDB);
         const updates: Partial<TaskDoc> = {};
         let changesDescription = '';
 
@@ -453,6 +464,12 @@ const AppContent: React.FC = () => {
     };
     
     // Subtask handlers
+    const syncTaskSubtasks = (taskId: string, subtasks: Subtask[]) => {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, subtasks } : t));
+        setTaskDocs(prev => prev.map(t => t.id === taskId ? { ...t, subtasks } : t));
+        setTaskToEdit(prev => prev && prev.id === taskId ? { ...prev, subtasks } as Task : prev);
+    };
+
     const handleAddSubtask = async (parentId: string, text: string) => {
         const task = taskDocs.find(t => t.id === parentId);
         if (!task) return;
@@ -460,6 +477,7 @@ const AppContent: React.FC = () => {
         const updatedSubtasks = [...(task.subtasks || []), newSubtask];
         try {
             await firestore.updateTaskDoc(parentId, { subtasks: updatedSubtasks });
+            syncTaskSubtasks(parentId, updatedSubtasks);
             await handleAddActivityLog('Subtarea Añadida', tasks.find(t => t.id === parentId)!, `Se añadió la subtarea: "${text}".`);
             await refreshData();
         } catch(e) { console.error(e) }
@@ -471,6 +489,7 @@ const AppContent: React.FC = () => {
         const updatedSubtasks = (task.subtasks || []).map(st => st.id === subtask.id ? subtask : st);
         try {
             await firestore.updateTaskDoc(parentId, { subtasks: updatedSubtasks });
+            syncTaskSubtasks(parentId, updatedSubtasks);
             const action = subtask.completed ? 'completó' : 'reabrió';
             await handleAddActivityLog('Subtarea Actualizada', tasks.find(t => t.id === parentId)!, `Se ${action} la subtarea: "${subtask.text}".`);
             await refreshData();
@@ -484,6 +503,7 @@ const AppContent: React.FC = () => {
         const updatedSubtasks = task.subtasks.filter(st => st.id !== subtaskId);
         try {
             await firestore.updateTaskDoc(parentId, { subtasks: updatedSubtasks });
+            syncTaskSubtasks(parentId, updatedSubtasks);
             await handleAddActivityLog('Subtarea Eliminada', tasks.find(t => t.id === parentId)!, `Se eliminó la subtarea: "${subtaskText}".`);
             await refreshData();
         } catch (e) { console.error(e); }
@@ -925,7 +945,11 @@ Resumen: "${summary}"`,
                 }
             });
 
-            const result = JSON.parse(response.text);
+            const resultText = response.text;
+            if (!resultText) {
+                throw new Error('La IA no devolvió texto parseable.');
+            }
+            const result = JSON.parse(resultText);
             const logs = result.daily_logs as { programmer_name: string, tasks: string[] }[];
 
             if (!logs || logs.length === 0) {
@@ -1000,7 +1024,7 @@ ${meetingNotes}
                 },
             });
 
-            const resultText = response.text.trim();
+            const resultText = (response.text || '').trim();
             if (!resultText) {
                 throw new Error("La IA ha devuelto una respuesta vacía.");
             }
@@ -1135,7 +1159,7 @@ ${meetingNotes}
                             onVisibilityFiltersChange={setVisibilityFilters}
                             allModules={modules}
                             allProgrammers={programmers}
-                            requirementTypeOptions={REQUIREMENT_TYPE_OPTIONS}
+                            requirementTypeOptions={[...REQUIREMENT_TYPE_OPTIONS]}
                         />;
             case 'planner':
                 return <PlannerView tasks={tasks} programmers={programmers} onEdit={handleEditTask} statusConfig={allItemsConfig} allItemsConfig={allItemsConfig} onOpenPlannerModal={handleOpenPlannerModal} onTaskMove={handleTaskMove} onTaskResize={handleTaskResize} />;
@@ -1296,3 +1320,4 @@ ${meetingNotes}
 };
 
 export default App;
+/// <reference types="vite/client" />

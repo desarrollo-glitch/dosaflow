@@ -20,6 +20,7 @@ export interface Attachment {
   name: string;
   url: string;
   type: 'link' | 'file';
+  source?: 'upload' | 'drive' | 'external';
   fileType?: string; // Mime type for files
   storagePath?: string; // Path in Firebase storage, for deletion
   createdAt: string; // ISO String for timestamp

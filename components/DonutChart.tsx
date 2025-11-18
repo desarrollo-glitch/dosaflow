@@ -29,7 +29,6 @@ const DonutSegment: React.FC<{
 
     const circumference = 2 * Math.PI * radius;
     const dasharray = circumference;
-    const dashoffset = circumference * (1 - (endAngle - startAngle) / (2 * Math.PI));
 
     return (
         <path

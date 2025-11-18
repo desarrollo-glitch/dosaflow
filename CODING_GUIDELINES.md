@@ -7,6 +7,7 @@ Este documento sirve como la "fuente de la verdad" para las convenciones, patron
 - **KISS (Keep It Simple, Stupid):** Prefiere soluciones simples y claras sobre las complejas.
 - **DRY (Don't Repeat Yourself):** Evita la duplicación de código. Reutiliza componentes y funciones siempre que sea posible.
 - **Código Autocomentado:** Nombra variables, funciones y componentes de forma descriptiva para que el código sea fácil de entender sin necesidad de comentarios excesivos.
+- **Cero errores en build:** Cada cambio debe dejar el proyecto sin errores de compilación/TypeScript (`npm run build` / `tsc --noEmit`). Analiza y corrige las advertencias y fallos antes de entregar.
 
 ---
 

@@ -229,7 +229,7 @@ const ByProgrammerView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal'>> 
     );
 };
 
-const StatsView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal' | 'onOpenMeetingDetailsModal' | 'onUpdateMeeting'>> = ({ meetings, tasks, programmers }) => {
+const StatsView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal' | 'onOpenMeetingDetailsModal' | 'onUpdateMeeting'>> = ({ meetings }) => {
     const stats = useMemo(() => {
         const totalMeetings = meetings.length;
         const allMeetingTasks = meetings.flatMap(m => m.tasks);

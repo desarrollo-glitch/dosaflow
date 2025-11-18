@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Meeting, MeetingTask, Task, ManagedItem } from '../types';
-import { XIcon, CheckBadgeIcon, EditIcon, PlusIcon, TrashIcon, SpinnerIcon, PrinterIcon } from './Icons';
+import { XIcon, EditIcon, PlusIcon, TrashIcon, PrinterIcon } from './Icons';
 
 interface MeetingDetailsModalProps {
     isOpen: boolean;
