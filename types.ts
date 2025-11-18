@@ -2,6 +2,8 @@ export type Status = 'Sin asignar' | 'Asignado' | 'En proceso' | 'Retrasado' | '
 
 export type Target = 'web' | 'app' | 'ambos' | string;
 
+export type RequirementType = 'Desarrollo' | 'Seguimiento' | string;
+
 export interface Assignment {
   programmerName: string;
   endDate: string; // YYYY-MM
@@ -37,6 +39,7 @@ export interface ActivityLog {
 export interface Task {
   id: string;
   requirement: string;
+  requirementType: RequirementType;
   module: string;
   target: Target;
   assignments: Assignment[];
@@ -76,6 +79,7 @@ export interface VisibilityFilters {
   status: string[];
   module: string[];
   programmer: string[];
+  requirementType: string[];
 }
 
 export interface Suggestion {
@@ -106,6 +110,7 @@ export interface TaskDoc {
   // FIX: Add docId for consistency, as it is added by the data fetching logic.
   docId: string; // The Firestore document ID
   requirement: string;
+  requirementType: RequirementType;
   moduleId: string;
   targetId: string;
   platformId: string;

@@ -4,7 +4,7 @@ import { SpinnerIcon, EditIcon, CheckIcon, XIcon } from './Icons';
 
 // Define schemas for display purposes, as Firestore is schema-less
 const collectionSchemas: Record<string, string[]> = {
-    tasks: ['id', 'requirement', 'moduleId', 'targetId', 'platformId', 'statusId', 'link', 'startDate'],
+    tasks: ['id', 'requirement', 'requirementType', 'moduleId', 'targetId', 'platformId', 'statusId', 'link', 'startDate'],
     task_assignments: ['id', 'taskId', 'programmerId', 'endDate'],
     programmers: ['id', 'name', 'color'],
     modules: ['id', 'name', 'color'],

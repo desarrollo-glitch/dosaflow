@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { firestoreDB } from './firebase';
 import { ManagedItem, ManagedStatus, Suggestion, Task, TaskDoc, TaskAssignmentDoc, ActivityLog, ActivityLogDoc, DailyLogDoc, DailySummaryDoc, MeetingDoc, UserAccessDoc, UserAccessStatus } from '../types';
+import { DEFAULT_REQUIREMENT_TYPE } from '../constants';
 import { INITIAL_SUGGESTIONS, AUTO_APPROVED_EMAILS } from '../constants';
 
 type ManagedCollectionName = 'programmers' | 'modules' | 'platforms' | 'targets';
@@ -212,6 +213,7 @@ export async function saveTask(
     const finalTaskData = { 
         ...taskDataToSave, 
         id: taskId, 
+        requirementType: taskDataToSave.requirementType || DEFAULT_REQUIREMENT_TYPE,
         subtasks: taskDataToSave.subtasks || [],
         attachments: taskDataToSave.attachments || [] 
     };

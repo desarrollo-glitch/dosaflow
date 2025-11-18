@@ -22,7 +22,7 @@ import { MeetingLogModal } from './components/MeetingLogModal';
 import { MeetingDetailsModal } from './components/MeetingDetailsModal';
 import { MeetingsView } from './components/MeetingsView';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { Task, Status, ManagedStatus, ManagedItem, SortConfig, FilterState, VisibilityFilters, Suggestion, Assignment, View, TaskDoc, TaskAssignmentDoc, Target, Subtask, ActivityLog, ActivityLogDoc, DailyLog, DailySummary, Attachment, Meeting, MeetingDoc, UserAccessDoc, UserAccessStatus } from './types';
+import { Task, Status, ManagedStatus, ManagedItem, SortConfig, FilterState, VisibilityFilters, Suggestion, Assignment, View, TaskDoc, TaskAssignmentDoc, Target, Subtask, ActivityLog, ActivityLogDoc, DailyLog, DailySummary, Attachment, Meeting, MeetingDoc, UserAccessDoc, UserAccessStatus, RequirementType } from './types';
 import * as firestore from './utils/firestore';
 import * as storage from './utils/storage';
 import { useAuth } from './src/contexts/AuthContext';
@@ -35,6 +35,7 @@ import { GoogleGenAI, Type, GenerateContentResponse } from '@google/genai';
 // FIX: Import firestoreDB and writeBatch for batch database operations.
 import { firestoreDB } from './utils/firebase';
 import { doc, writeBatch } from 'firebase/firestore';
+import { DEFAULT_REQUIREMENT_TYPE, REQUIREMENT_TYPE_OPTIONS, REQUIREMENT_TYPES } from './constants';
 
 const App: React.FC = () => {
     const { user, loading } = useAuth();
@@ -120,7 +121,7 @@ const AppContent: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
-  const [visibilityFilters, setVisibilityFilters] = useState<VisibilityFilters>({ status: [], module: [], programmer: [] });
+  const [visibilityFilters, setVisibilityFilters] = useState<VisibilityFilters>({ status: [], module: [], programmer: [], requirementType: [] });
   const [notification, setNotification] = useState({ show: false, message: '', subMessage: '' });
   const [isPlannerModalOpen, setIsPlannerModalOpen] = useState(false);
   const [plannerModalContext, setPlannerModalContext] = useState<{ programmer: ManagedItem, month: string } | null>(null);
@@ -166,6 +167,7 @@ const AppContent: React.FC = () => {
     return tasks.map(taskDoc => ({
         id: taskDoc.id,
         requirement: taskDoc.requirement,
+        requirementType: (taskDoc.requirementType as RequirementType) || DEFAULT_REQUIREMENT_TYPE,
         link: taskDoc.link,
         startDate: taskDoc.startDate,
         module: modulesMap.get(taskDoc.moduleId)?.name || 'N/A',
@@ -182,9 +184,18 @@ const AppContent: React.FC = () => {
         if (!user) return;
         try {
             const data = await firestore.getAllData();
+
+            const tasksWithType = data.tasks.map(task => ({
+                ...task,
+                requirementType: task.requirementType || DEFAULT_REQUIREMENT_TYPE,
+            }));
+            const tasksMissingType = data.tasks.filter(task => !task.requirementType);
+            if (tasksMissingType.length > 0) {
+                await Promise.all(tasksMissingType.map(task => firestore.updateTaskDoc(task.id, { requirementType: DEFAULT_REQUIREMENT_TYPE })));
+            }
             
             const joinedTasks = joinData(
-                data.tasks,
+                tasksWithType,
                 data.task_assignments,
                 data.programmers,
                 data.modules,
@@ -194,13 +205,13 @@ const AppContent: React.FC = () => {
             );
 
             // FIX: Explicitly type `tasksMap` to ensure TypeScript correctly infers the type of its values as `TaskDoc`, resolving property access errors.
-            const tasksMap: Map<string, TaskDoc> = new Map(data.tasks.map(t => [t.id, t]));
+            const tasksMap: Map<string, TaskDoc> = new Map(tasksWithType.map(t => [t.id, t]));
             const joinedMeetings: Meeting[] = data.meetings.map(meetingDoc => ({
                 ...meetingDoc,
                 requirementName: tasksMap.get(meetingDoc.requirementId)?.requirement || 'N/A',
             }));
 
-            setTaskDocs(data.tasks);
+            setTaskDocs(tasksWithType);
             setTaskAssignments(data.task_assignments);
             
             const sortedProgrammers = data.programmers.sort((a, b) => {
@@ -305,6 +316,7 @@ const AppContent: React.FC = () => {
                 docId: taskData.id || '', // Use existing id as docId, or empty for new tasks.
                 id: taskData.id,
                 requirement: taskData.requirement,
+                requirementType: taskData.requirementType || DEFAULT_REQUIREMENT_TYPE,
                 moduleId: getManagedItemId(taskData.module, modules),
                 platformId: getManagedItemId(taskData.platform, platforms),
                 targetId: getManagedItemId(taskData.target, targets),
@@ -398,6 +410,10 @@ const AppContent: React.FC = () => {
             const moduleId = modules.find(m => m.name === otherFields.module)?.id;
             if(moduleId) updates.moduleId = moduleId;
             changesDescription += `Módulo: '${task.module}' -> '${otherFields.module}'. `;
+        }
+        if (otherFields.requirementType && otherFields.requirementType !== task.requirementType) {
+            updates.requirementType = otherFields.requirementType as RequirementType;
+            changesDescription += `Tipo: '${task.requirementType}' -> '${otherFields.requirementType}'. `;
         }
         // ... (add other fields similarly)
 
@@ -545,11 +561,11 @@ const AppContent: React.FC = () => {
 
 
     const exportToCsv = () => {
-        const headers = ['ID', 'Necesidad', 'Módulo', 'Destino', 'Programadores', 'Plataforma', 'Enlace', 'Estado', 'Inicio', 'Fin'];
+        const headers = ['ID', 'Necesidad', 'Tipo', 'Módulo', 'Destino', 'Programadores', 'Plataforma', 'Enlace', 'Estado', 'Inicio', 'Fin'];
         const rows = tasks.map(task => {
             const programmerNames = task.assignments.map(a => a.programmerName).join(', ');
             const latestEndDate = task.assignments.map(a => a.endDate).sort().pop() || '';
-            const row = [task.id, task.requirement, task.module, task.target, programmerNames, task.platform, task.link, task.status, task.startDate, latestEndDate];
+            const row = [task.id, task.requirement, task.requirementType, task.module, task.target, programmerNames, task.platform, task.link, task.status, task.startDate, latestEndDate];
             return row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(',');
         });
 
@@ -571,6 +587,9 @@ const AppContent: React.FC = () => {
         // Visibility filters
         if (visibilityFilters.status.length > 0 && visibilityFilters.status.length < managedStatuses.length) {
             filtered = filtered.filter(task => visibilityFilters.status.includes(task.status));
+        }
+        if (visibilityFilters.requirementType.length > 0 && visibilityFilters.requirementType.length < REQUIREMENT_TYPES.length) {
+            filtered = filtered.filter(task => visibilityFilters.requirementType.includes(task.requirementType));
         }
         if (visibilityFilters.module.length > 0 && visibilityFilters.module.length < modules.length) {
             filtered = filtered.filter(task => visibilityFilters.module.includes(task.module));
@@ -638,7 +657,7 @@ const AppContent: React.FC = () => {
     const allItemsConfig = useMemo(() => {
       // FIX: Ensure the configuration object includes both 'name' and 'color' to match the expected type in consuming components.
       const config: Record<string, { name: string, color: string }> = {};
-      [...programmers, ...modules, ...platforms, ...targets, ...managedStatuses].forEach(item => {
+      [...programmers, ...modules, ...platforms, ...targets, ...managedStatuses, ...REQUIREMENT_TYPE_OPTIONS].forEach(item => {
         if (item.name) {
             config[item.name] = { name: item.name, color: item.color };
         }
@@ -1064,6 +1083,7 @@ ${meetingNotes}
                             onVisibilityFiltersChange={setVisibilityFilters}
                             allModules={modules}
                             allProgrammers={programmers}
+                            requirementTypeOptions={REQUIREMENT_TYPE_OPTIONS}
                         />;
             case 'planner':
                 return <PlannerView tasks={tasks} programmers={programmers} onEdit={handleEditTask} statusConfig={allItemsConfig} allItemsConfig={allItemsConfig} onOpenPlannerModal={handleOpenPlannerModal} onTaskMove={handleTaskMove} onTaskResize={handleTaskResize} />;

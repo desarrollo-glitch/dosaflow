@@ -1,4 +1,4 @@
-import { Status, Suggestion } from './types';
+import { Status, Suggestion, RequirementType } from './types';
 
 export const INITIAL_STATUS_CONFIG: Record<Status, { color: string; name: string }> = {
     'Sin asignar': { color: '#9CA3AF', name: 'Sin asignar' }, // gray-400
@@ -9,6 +9,14 @@ export const INITIAL_STATUS_CONFIG: Record<Status, { color: string; name: string
     'Finalizado': { color: '#10B981', name: 'Finalizado' }, // emerald-500
     'Descartado': { color: '#6B7280', name: 'Descartado' }, // gray-500
 };
+
+export const REQUIREMENT_TYPE_OPTIONS = [
+    { id: 'tipo-desarrollo', docId: 'tipo-desarrollo', name: 'Desarrollo', color: '#0EA5E9' },
+    { id: 'tipo-seguimiento', docId: 'tipo-seguimiento', name: 'Seguimiento', color: '#8B5CF6' },
+] as const;
+
+export const REQUIREMENT_TYPES: RequirementType[] = REQUIREMENT_TYPE_OPTIONS.map(option => option.name);
+export const DEFAULT_REQUIREMENT_TYPE: RequirementType = 'Desarrollo';
 
 const categorizedSuggestionTexts: Record<string, string[]> = {
     "UI/UX y Experiencia de Usuario": [

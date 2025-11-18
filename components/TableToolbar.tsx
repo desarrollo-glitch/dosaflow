@@ -8,11 +8,12 @@ interface TableToolbarProps {
     allStatuses: ManagedStatus[];
     allModules: ManagedItem[];
     allProgrammers: ManagedItem[];
+    allRequirementTypes: { id: string; name: string; color: string }[];
 }
 
 interface FilterSectionProps {
     title: string;
-    items: (ManagedStatus | ManagedItem)[];
+    items: { id: string; name: string; color: string }[];
     selectedItems: string[];
     onSelectionChange: (newSelection: string[]) => void;
 }
@@ -64,6 +65,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
     allStatuses,
     allModules,
     allProgrammers,
+    allRequirementTypes,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -86,8 +88,8 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
     };
 
     // FIX: Replaced a potentially unsafe reduce operation with a direct, type-safe sum to prevent runtime errors.
-    const activeFilterCount = visibilityFilters.status.length + visibilityFilters.module.length + visibilityFilters.programmer.length;
-    const totalFilterCount = allStatuses.length + allModules.length + allProgrammers.length;
+    const activeFilterCount = visibilityFilters.status.length + visibilityFilters.module.length + visibilityFilters.programmer.length + visibilityFilters.requirementType.length;
+    const totalFilterCount = allStatuses.length + allModules.length + allProgrammers.length + allRequirementTypes.length;
     const isAnyFilterActive = activeFilterCount < totalFilterCount;
 
     return (
@@ -105,8 +107,8 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
                 {isAnyFilterActive && (
                     <span className="bg-brand-primary text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                         {/* FIX: Use a type-safe array of keys to prevent potential TypeScript errors with Object.keys. */}
-                        {(['status', 'module', 'programmer'] as const).filter(key => {
-                            const allItems = { status: allStatuses, module: allModules, programmer: allProgrammers };
+                        {(['status', 'module', 'programmer', 'requirementType'] as const).filter(key => {
+                            const allItems = { status: allStatuses, module: allModules, programmer: allProgrammers, requirementType: allRequirementTypes };
                             return visibilityFilters[key].length < allItems[key].length;
                         }).length}
                     </span>
@@ -121,6 +123,12 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
                             items={allStatuses}
                             selectedItems={visibilityFilters.status}
                             onSelectionChange={(newSelection) => handleFilterChange('status', newSelection)}
+                        />
+                        <FilterSection
+                            title="Tipos"
+                            items={allRequirementTypes}
+                            selectedItems={visibilityFilters.requirementType}
+                            onSelectionChange={(newSelection) => handleFilterChange('requirementType', newSelection)}
                         />
                         <FilterSection
                             title="Módulos"

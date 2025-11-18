@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Task, Status, ManagedItem, ManagedStatus, SortConfig, FilterState, VisibilityFilters } from '../types';
+import { REQUIREMENT_TYPE_OPTIONS } from '../constants';
 import { EditIcon, LinkIcon, PaperclipIcon, SortIndicatorIcon } from './Icons';
 import { EditableTag } from './EditableTag';
 import { EditableText } from './EditableText';
@@ -31,6 +32,7 @@ interface TableViewProps {
   onVisibilityFiltersChange: React.Dispatch<React.SetStateAction<VisibilityFilters>>;
   allModules: ManagedItem[];
   allProgrammers: ManagedItem[];
+  requirementTypeOptions?: { id: string; name: string; color: string }[];
 }
 
 const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -88,7 +90,8 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         visibilityFilters,
         onVisibilityFiltersChange,
         allModules,
-        allProgrammers
+        allProgrammers,
+        requirementTypeOptions = REQUIREMENT_TYPE_OPTIONS
     } = props;
 
   const FilterInput: React.FC<{ filterKey: keyof Task | 'programmers' }> = ({ filterKey }) => (
@@ -110,6 +113,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             allStatuses={managedStatuses}
             allModules={allModules}
             allProgrammers={allProgrammers}
+            allRequirementTypes={requirementTypeOptions}
         />
       <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -117,6 +121,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             <tr>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Acciones</th>
               <TableHeader sortKey="status" title="Estado" onSort={onSort} sortConfig={sortConfig} />
+              <TableHeader sortKey="requirementType" title="Tipo" onSort={onSort} sortConfig={sortConfig} />
               <TableHeader sortKey="requirement" title="Necesidad" onSort={onSort} sortConfig={sortConfig} className="min-w-[300px]" />
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Subtareas</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Adjuntos</th>
@@ -131,6 +136,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             <tr className="bg-gray-100 dark:bg-gray-700/50">
               <td className="px-6 py-2"></td>
               <td className="px-6 py-2"><FilterInput filterKey="status" /></td>
+              <td className="px-6 py-2"><FilterInput filterKey="requirementType" /></td>
               <td className="px-6 py-2"><FilterInput filterKey="requirement" /></td>
               <td className="px-6 py-2"></td>
               <td className="px-6 py-2"></td>
@@ -165,19 +171,27 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     )}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <EditableTag
-                    value={task.status}
-                    options={managedStatuses}
-                    onSave={(newValue) => onTaskUpdate(task.id, { status: newValue })}
-                    color={statusConfig[task.status]?.color || '#ccc'}
-                  />
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-300 min-w-[300px]">
-                   <EditableText
-                    value={task.requirement}
-                    onSave={(newValue) => onTaskUpdate(task.id, { requirement: newValue })}
-                  />
+              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <EditableTag
+                  value={task.status}
+                  options={managedStatuses}
+                  onSave={(newValue) => onTaskUpdate(task.id, { status: newValue })}
+                  color={statusConfig[task.status]?.color || '#ccc'}
+                />
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <EditableTag
+                  value={task.requirementType}
+                  options={requirementTypeOptions}
+                  onSave={(newValue) => onTaskUpdate(task.id, { requirementType: newValue })}
+                  color={allItemsConfig[task.requirementType]?.color || '#ccc'}
+                />
+              </td>
+              <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-300 min-w-[300px]">
+                 <EditableText
+                  value={task.requirement}
+                  onSave={(newValue) => onTaskUpdate(task.id, { requirement: newValue })}
+                />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <SubtaskProgress subtasks={task.subtasks} />
