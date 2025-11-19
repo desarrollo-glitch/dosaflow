@@ -32,7 +32,7 @@ import { UserAccessView } from './components/UserAccessView';
 import { logOut } from './utils/auth';
 import { pickDriveFile } from './utils/drive';
 // FIX: Import GenerateContentResponse for explicit API response typing.
-import { GoogleGenAI, Type, GenerateContentResponse } from '@google/genai';
+import { GoogleGenAI, Type, GenerateContentResponse, ApiError } from '@google/genai';
 import { DEFAULT_REQUIREMENT_TYPE, REQUIREMENT_TYPE_OPTIONS, REQUIREMENT_TYPES } from './constants';
 
 const App: React.FC = () => {
@@ -156,6 +156,7 @@ const AppContent: React.FC = () => {
   const googlePickerClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const googlePickerApiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
   const geminiApiKey = (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY) as string | undefined;
+  const geminiModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash') as string;
   // View models for UI
   const [tasks, setTasks] = useState<Task[]>([]);
   const [programmers, setProgrammers] = useState<ManagedItem[]>([]);
@@ -356,6 +357,28 @@ const AppContent: React.FC = () => {
             throw new Error('Gemini API key no configurada');
         }
         return new GoogleGenAI({ apiKey: geminiApiKey });
+    };
+
+    const getGeminiErrorMessage = (error: unknown) => {
+        if (error instanceof ApiError) {
+            if (error.status === 401 || error.status === 403) {
+                return 'No tenemos permiso para usar la API de Gemini. Revisa la clave configurada.';
+            }
+            if (error.status === 429) {
+                return 'Gemini recibió demasiadas peticiones seguidas. Intenta de nuevo en unos segundos.';
+            }
+            if (error.status === 503) {
+                return 'Gemini está saturado y no puede procesar más reuniones por ahora. Prueba más tarde.';
+            }
+            if (error.status === 404) {
+                return `El modelo "${geminiModel}" no está disponible en esta API. Ajusta VITE_GEMINI_MODEL o vuelve a un modelo soportado.`;
+            }
+            return `Gemini devolvió el estado ${error.status}.`;
+        }
+        if (error instanceof Error && error.message) {
+            return error.message;
+        }
+        return 'No se pudo procesar la solicitud de IA.';
     };
     
     const requestConfirmation = (title: string, message: React.ReactNode, onConfirm: () => void) => {
@@ -987,7 +1010,7 @@ const AppContent: React.FC = () => {
         try {
             const ai = getGeminiClient();
             const response: GenerateContentResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: geminiModel,
                 contents: `Analiza el siguiente resumen del día y extrae las tareas realizadas por cada programador. Responde únicamente con un objeto JSON. Los nombres de los programadores válidos son: ${programmerNames.join(', ')}.
 
 Resumen: "${summary}"`,
@@ -1055,7 +1078,7 @@ Resumen: "${summary}"`,
 
         } catch (error) {
             console.error("Error processing summary with AI:", error);
-            showNotification('Error de IA', 'No se pudo procesar el resumen.');
+            showNotification('Error de IA', getGeminiErrorMessage(error));
         }
     };
     
@@ -1075,7 +1098,7 @@ Resumen: "${summary}"`,
         try {
             const ai = getGeminiClient();
             const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
+                model: geminiModel,
                 contents: `Analiza las siguientes notas de una reunión sobre el requisito "${task.requirement}" del día ${date}. Extrae un resumen, las acciones analizadas, las conclusiones, las decisiones tomadas y una lista de tareas asignadas a los programadores. Los programadores válidos son: [${involvedProgrammerNames.join(', ')}]. Si no se asigna una tarea a alguien, usa "Todos". Devuelve el resultado únicamente en formato JSON. Las acciones, conclusiones y decisiones deben ser arrays de strings.
 
 Notas de la reunión:
@@ -1148,7 +1171,7 @@ ${meetingNotes}
             await refreshData();
         } catch (error) {
             console.error("Error processing meeting notes:", error);
-            showNotification('Error de IA', 'No se pudo procesar la reunión. Revisa la consola para más detalles.');
+            showNotification('Error de IA', getGeminiErrorMessage(error));
         }
     };
     
