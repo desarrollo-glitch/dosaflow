@@ -98,6 +98,9 @@ type CandidatePart = {
     inlineData?: { data?: string };
 };
 
+type AiProviderEngine = 'gemini' | 'openai';
+type AiProviderConfig = { engine: AiProviderEngine; model: string };
+
 const extractAiResponseText = (response: GenerateContentResponse): string => {
     const inlineText = response.text?.trim();
     if (inlineText) {
@@ -152,14 +155,16 @@ const normalizeTaskList = (tasks: unknown): string[] => {
 
 type AiDailyLog = { programmer_name?: string; tasks?: unknown };
 type GenerateContentParams = Parameters<GoogleGenAI['models']['generateContent']>[0];
+type GeminiConfig = NonNullable<GenerateContentParams['config']>;
+type GeminiResponseSchema = GeminiConfig extends { responseSchema?: infer R } ? R : never;
 type StructuredAiRequest = {
     prompt: string;
     schemaName: string;
-    geminiSchema: GenerateContentParams['config']['responseSchema'];
+    geminiSchema: GeminiResponseSchema;
     openAiSchema: Record<string, unknown>;
 };
 
-const dailyLogsGeminiSchema: GenerateContentParams['config']['responseSchema'] = {
+const dailyLogsGeminiSchema: GeminiResponseSchema = {
     type: Type.OBJECT,
     properties: {
         daily_logs: {
@@ -201,7 +206,7 @@ const dailyLogsOpenAiSchema = {
     additionalProperties: false
 };
 
-const meetingGeminiSchema: GenerateContentParams['config']['responseSchema'] = {
+const meetingGeminiSchema: GeminiResponseSchema = {
     type: Type.OBJECT,
     properties: {
         summary: { type: Type.STRING },
