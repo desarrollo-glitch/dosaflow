@@ -151,12 +151,110 @@ const normalizeTaskList = (tasks: unknown): string[] => {
 };
 
 type AiDailyLog = { programmer_name?: string; tasks?: unknown };
+type GenerateContentParams = Parameters<GoogleGenAI['models']['generateContent']>[0];
+type StructuredAiRequest = {
+    prompt: string;
+    schemaName: string;
+    geminiSchema: GenerateContentParams['config']['responseSchema'];
+    openAiSchema: Record<string, unknown>;
+};
+
+const dailyLogsGeminiSchema: GenerateContentParams['config']['responseSchema'] = {
+    type: Type.OBJECT,
+    properties: {
+        daily_logs: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    programmer_name: { type: Type.STRING },
+                    tasks: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ['programmer_name', 'tasks']
+            }
+        }
+    },
+    required: ['daily_logs']
+};
+
+const dailyLogsOpenAiSchema = {
+    type: 'object',
+    properties: {
+        daily_logs: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    programmer_name: { type: 'string' },
+                    tasks: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        minItems: 1
+                    }
+                },
+                required: ['programmer_name', 'tasks'],
+                additionalProperties: false
+            }
+        }
+    },
+    required: ['daily_logs'],
+    additionalProperties: false
+};
+
+const meetingGeminiSchema: GenerateContentParams['config']['responseSchema'] = {
+    type: Type.OBJECT,
+    properties: {
+        summary: { type: Type.STRING },
+        actionsAnalyzed: { type: Type.ARRAY, items: { type: Type.STRING } },
+        conclusions: { type: Type.ARRAY, items: { type: Type.STRING } },
+        decisions: { type: Type.ARRAY, items: { type: Type.STRING } },
+        tasks: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    text: { type: Type.STRING },
+                    programmer: { type: Type.STRING }
+                },
+                required: ['text', 'programmer']
+            }
+        }
+    },
+    required: ['summary', 'actionsAnalyzed', 'conclusions', 'decisions', 'tasks']
+};
+
+const meetingOpenAiSchema = {
+    type: 'object',
+    properties: {
+        summary: { type: 'string' },
+        actionsAnalyzed: { type: 'array', items: { type: 'string' } },
+        conclusions: { type: 'array', items: { type: 'string' } },
+        decisions: { type: 'array', items: { type: 'string' } },
+        tasks: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    text: { type: 'string' },
+                    programmer: { type: 'string' }
+                },
+                required: ['text', 'programmer'],
+                additionalProperties: false
+            }
+        }
+    },
+    required: ['summary', 'actionsAnalyzed', 'conclusions', 'decisions', 'tasks'],
+    additionalProperties: false
+};
 
 const AppContent: React.FC = () => {
   const googlePickerClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const googlePickerApiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
   const geminiApiKey = (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY) as string | undefined;
   const geminiModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash') as string;
+  const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
+  const openaiModel = (import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini') as string;
+  const aiProviderChain = (import.meta.env.VITE_AI_PROVIDER_CHAIN || '') as string;
   // View models for UI
   const [tasks, setTasks] = useState<Task[]>([]);
   const [programmers, setProgrammers] = useState<ManagedItem[]>([]);
@@ -201,6 +299,42 @@ const AppContent: React.FC = () => {
   const defaultVisibilityApplied = useRef(false);
 
   const { user } = useAuth();
+  const geminiModels = useMemo(() => {
+    const envModels = geminiModel
+        .split(',')
+        .map(m => m.trim())
+        .filter(Boolean);
+    const defaults = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    const prioritized = envModels.length ? envModels : defaults;
+    return Array.from(new Set([...prioritized, ...defaults]));
+  }, [geminiModel]);
+  const aiProviders = useMemo<AiProviderConfig[]>(() => {
+    const result: AiProviderConfig[] = [];
+    const seen = new Set<string>();
+    const addProvider = (engine: AiProviderEngine, model: string) => {
+        if (!model) return;
+        const key = `${engine}:${model}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        result.push({ engine, model });
+    };
+    const entries = aiProviderChain.split(',').map(e => e.trim()).filter(Boolean);
+    entries.forEach(entry => {
+        const [engineRaw, modelRaw] = entry.split(':');
+        if (!engineRaw || !modelRaw) return;
+        const engine = engineRaw.trim().toLowerCase();
+        const model = modelRaw.trim();
+        if ((engine === 'gemini' || engine === 'openai') && model) {
+            if (engine === 'openai' && !openaiApiKey) return;
+            addProvider(engine as AiProviderEngine, model);
+        }
+    });
+    geminiModels.forEach(model => addProvider('gemini', model));
+    if (openaiApiKey) {
+        addProvider('openai', openaiModel);
+    }
+    return result;
+  }, [aiProviderChain, geminiModels, openaiApiKey, openaiModel]);
 
 
   const joinData = useCallback((
@@ -359,21 +493,111 @@ const AppContent: React.FC = () => {
         return new GoogleGenAI({ apiKey: geminiApiKey });
     };
 
-    const getGeminiErrorMessage = (error: unknown) => {
-        if (error instanceof ApiError) {
-            if (error.status === 401 || error.status === 403) {
-                return 'No tenemos permiso para usar la API de Gemini. Revisa la clave configurada.';
+    const callOpenAi = async (model: string, prompt: string, schemaName: string, jsonSchema: Record<string, unknown>) => {
+        if (!openaiApiKey) {
+            throw Object.assign(new Error('OpenAI API key no configurada'), { status: 401 });
+        }
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${openaiApiKey}`
+            },
+            body: JSON.stringify({
+                model,
+                messages: [
+                    { role: 'system', content: 'Devuelve únicamente JSON válido que cumpla estrictamente con el esquema solicitado.' },
+                    { role: 'user', content: prompt }
+                ],
+                response_format: {
+                    type: 'json_schema',
+                    json_schema: {
+                        name: schemaName,
+                        strict: true,
+                        schema: jsonSchema
+                    }
+                }
+            })
+        });
+
+        if (!response.ok) {
+            let errorMessage = `OpenAI devolvió ${response.status}`;
+            try {
+                const errorBody = await response.json();
+                if (errorBody?.error?.message) {
+                    errorMessage = errorBody.error.message;
+                }
+            } catch {
+                // ignore json parse errors
             }
-            if (error.status === 429) {
-                return 'Gemini recibió demasiadas peticiones seguidas. Intenta de nuevo en unos segundos.';
+            const err: any = new Error(errorMessage);
+            err.status = response.status;
+            throw err;
+        }
+
+        const data = await response.json();
+        const rawText = data?.choices?.[0]?.message?.content?.trim() || '';
+        if (!rawText) {
+            throw new Error('OpenAI no devolvió texto parseable.');
+        }
+        return rawText;
+    };
+
+    const runStructuredAiRequest = async ({ prompt, schemaName, geminiSchema, openAiSchema }: StructuredAiRequest): Promise<string> => {
+        let lastError: unknown = null;
+        for (const provider of aiProviders) {
+            try {
+                if (provider.engine === 'gemini') {
+                    if (!geminiApiKey) continue;
+                    const ai = getGeminiClient();
+                    const response = await ai.models.generateContent({
+                        model: provider.model,
+                        contents: prompt,
+                        config: {
+                            responseMimeType: "application/json",
+                            responseSchema: geminiSchema
+                        }
+                    });
+                    const rawText = extractAiResponseText(response);
+                    if (!rawText) {
+                        throw new Error('La IA no devolvió texto parseable.');
+                    }
+                    return rawText;
+                }
+                if (provider.engine === 'openai') {
+                    if (!openaiApiKey) continue;
+                    const rawText = await callOpenAi(provider.model, prompt, schemaName, openAiSchema);
+                    if (!rawText) {
+                        throw new Error('La IA no devolvió texto parseable.');
+                    }
+                    return rawText;
+                }
+            } catch (error) {
+                lastError = error;
+                const status = error instanceof ApiError ? error.status : (error as any)?.status;
+                if (status && [404, 429, 503].includes(status)) {
+                    console.warn(`Proveedor ${provider.engine}:${provider.model} no disponible (${status}). Probando el siguiente...`);
+                    continue;
+                }
             }
-            if (error.status === 503) {
-                return 'Gemini está saturado y no puede procesar más reuniones por ahora. Prueba más tarde.';
-            }
-            if (error.status === 404) {
-                return `El modelo "${geminiModel}" no está disponible en esta API. Ajusta VITE_GEMINI_MODEL o vuelve a un modelo soportado.`;
-            }
-            return `Gemini devolvió el estado ${error.status}.`;
+        }
+        throw lastError || new Error('No se pudo completar la solicitud de IA con los proveedores configurados.');
+    };
+
+    const getAiErrorMessage = (error: unknown) => {
+        const providerSummary = aiProviders.map(p => `${p.engine}:${p.model}`).join(', ') || 'sin proveedores configurados';
+        const status = error instanceof ApiError ? error.status : (error as any)?.status;
+        if (status === 401 || status === 403) {
+            return 'No tenemos permiso para usar la API configurada. Revisa la clave y el proveedor.';
+        }
+        if (status === 429) {
+            return 'El proveedor recibió demasiadas peticiones seguidas. Intenta de nuevo en unos segundos.';
+        }
+        if (status === 503) {
+            return 'El proveedor está saturado y no puede procesar más solicitudes por ahora. Prueba más tarde.';
+        }
+        if (status === 404) {
+            return `Ninguno de los proveedores configurados (${providerSummary}) está disponible. Ajusta VITE_GEMINI_MODEL o VITE_AI_PROVIDER_CHAIN.`;
         }
         if (error instanceof Error && error.message) {
             return error.message;
@@ -1008,36 +1232,15 @@ const AppContent: React.FC = () => {
         const programmerNames = programmers.map(p => p.name).filter(name => name !== "Sin asignar");
 
         try {
-            const ai = getGeminiClient();
-            const response: GenerateContentResponse = await ai.models.generateContent({
-                model: geminiModel,
-                contents: `Analiza el siguiente resumen del día y extrae las tareas realizadas por cada programador. Responde únicamente con un objeto JSON. Los nombres de los programadores válidos son: ${programmerNames.join(', ')}.
+            const rawText = await runStructuredAiRequest({
+                prompt: `Analiza el siguiente resumen del día y extrae las tareas realizadas por cada programador. Responde únicamente con un objeto JSON. Los nombres de los programadores válidos son: ${programmerNames.join(', ')}.
 
 Resumen: "${summary}"`,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            daily_logs: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        programmer_name: { type: Type.STRING },
-                                        tasks: {
-                                            type: Type.ARRAY,
-                                            items: { type: Type.STRING }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                schemaName: 'DailyLogsResponse',
+                geminiSchema: dailyLogsGeminiSchema,
+                openAiSchema: dailyLogsOpenAiSchema
             });
 
-            const rawText = extractAiResponseText(response);
             const resultText = sanitizeJsonPayload(rawText);
             if (!resultText) {
                 throw new Error('La IA no devolvió texto parseable.');
@@ -1078,7 +1281,7 @@ Resumen: "${summary}"`,
 
         } catch (error) {
             console.error("Error processing summary with AI:", error);
-            showNotification('Error de IA', getGeminiErrorMessage(error));
+            showNotification('Error de IA', getAiErrorMessage(error));
         }
     };
     
@@ -1096,43 +1299,18 @@ Resumen: "${summary}"`,
         }
 
         try {
-            const ai = getGeminiClient();
-            const response = await ai.models.generateContent({
-                model: geminiModel,
-                contents: `Analiza las siguientes notas de una reunión sobre el requisito "${task.requirement}" del día ${date}. Extrae un resumen, las acciones analizadas, las conclusiones, las decisiones tomadas y una lista de tareas asignadas a los programadores. Los programadores válidos son: [${involvedProgrammerNames.join(', ')}]. Si no se asigna una tarea a alguien, usa "Todos". Devuelve el resultado únicamente en formato JSON. Las acciones, conclusiones y decisiones deben ser arrays de strings.
+            const rawText = await runStructuredAiRequest({
+                prompt: `Analiza las siguientes notas de una reunión sobre el requisito "${task.requirement}" del día ${date}. Extrae un resumen, las acciones analizadas, las conclusiones, las decisiones tomadas y una lista de tareas asignadas a los programadores. Los programadores válidos son: [${involvedProgrammerNames.join(', ')}]. Si no se asigna una tarea a alguien, usa "Todos". Devuelve el resultado únicamente en formato JSON. Las acciones, conclusiones y decisiones deben ser arrays de strings.
 
 Notas de la reunión:
 ---
 ${meetingNotes}
 ---`,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            summary: { type: Type.STRING, description: "Resumen conciso de la reunión." },
-                            actionsAnalyzed: { type: Type.ARRAY, description: "Lista de puntos o acciones clave que se discutieron.", items: { type: Type.STRING } },
-                            conclusions: { type: Type.ARRAY, description: "Lista de conclusiones principales a las que se llegó.", items: { type: Type.STRING } },
-                            decisions: { type: Type.ARRAY, description: "Lista de decisiones firmes que se tomaron.", items: { type: Type.STRING } },
-                            tasks: {
-                                type: Type.ARRAY,
-                                description: "Lista de tareas específicas asignadas.",
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        text: { type: Type.STRING, description: "La descripción de la tarea." },
-                                        programmer: { type: Type.STRING, description: `El programador asignado. Debe ser uno de: ${involvedProgrammerNames.join(', ')} o "Todos".` }
-                                    },
-                                    required: ['text', 'programmer']
-                                }
-                            }
-                        },
-                        required: ['summary', 'actionsAnalyzed', 'conclusions', 'decisions', 'tasks']
-                    },
-                },
+                schemaName: 'MeetingNotesResponse',
+                geminiSchema: meetingGeminiSchema,
+                openAiSchema: meetingOpenAiSchema
             });
 
-            const rawText = extractAiResponseText(response);
             const resultText = sanitizeJsonPayload(rawText);
             if (!resultText) {
                 throw new Error("La IA ha devuelto una respuesta vacía.");
@@ -1171,7 +1349,7 @@ ${meetingNotes}
             await refreshData();
         } catch (error) {
             console.error("Error processing meeting notes:", error);
-            showNotification('Error de IA', getGeminiErrorMessage(error));
+            showNotification('Error de IA', getAiErrorMessage(error));
         }
     };
     
