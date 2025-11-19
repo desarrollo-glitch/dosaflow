@@ -92,9 +92,70 @@ const customProgrammerOrder = [
     'Victoria', 'Jesús', 'Jose Ojeda', 'Pepe Poveda', 'Sergio', 'Juan Antonio'
 ];
 
+type CandidatePart = {
+    text?: string;
+    functionCall?: { args?: unknown };
+    inlineData?: { data?: string };
+};
+
+const extractAiResponseText = (response: GenerateContentResponse): string => {
+    const inlineText = response.text?.trim();
+    if (inlineText) {
+        return inlineText;
+    }
+
+    const parts = (response.candidates?.[0]?.content?.parts ?? []) as CandidatePart[];
+    for (const part of parts) {
+        if (typeof part.text === 'string' && part.text.trim()) {
+            return part.text.trim();
+        }
+        if (part.functionCall?.args) {
+            try {
+                return JSON.stringify(part.functionCall.args);
+            } catch {
+                // Ignore serialization errors and keep checking other parts.
+            }
+        }
+        if (part.inlineData?.data) {
+            try {
+                return atob(part.inlineData.data).trim();
+            } catch {
+                // Ignore invalid base64 payloads and continue.
+            }
+        }
+    }
+    return '';
+};
+
+const sanitizeJsonPayload = (raw: string): string => {
+    if (!raw) return '';
+    const trimmed = raw.trim();
+    const fencedMatch = trimmed.match(/```(?:json)?([\s\S]*?)```/i);
+    const candidate = fencedMatch ? fencedMatch[1] : trimmed;
+    const firstBrace = candidate.indexOf('{');
+    const lastBrace = candidate.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        return candidate.slice(firstBrace, lastBrace + 1);
+    }
+    return candidate;
+};
+
+const normalizeTaskList = (tasks: unknown): string[] => {
+    if (Array.isArray(tasks)) {
+        return tasks.filter((task): task is string => typeof task === 'string' && task.trim().length > 0);
+    }
+    if (typeof tasks === 'string' && tasks.trim().length > 0) {
+        return [tasks.trim()];
+    }
+    return [];
+};
+
+type AiDailyLog = { programmer_name?: string; tasks?: unknown };
+
 const AppContent: React.FC = () => {
   const googlePickerClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const googlePickerApiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
+  const geminiApiKey = (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY) as string | undefined;
   // View models for UI
   const [tasks, setTasks] = useState<Task[]>([]);
   const [programmers, setProgrammers] = useState<ManagedItem[]>([]);
@@ -287,6 +348,14 @@ const AppContent: React.FC = () => {
     const showNotification = (message: string, subMessage = '') => {
         setNotification({ show: true, message, subMessage });
         setTimeout(() => setNotification({ show: false, message: '', subMessage: '' }), 3000);
+    };
+
+    const getGeminiClient = () => {
+        if (!geminiApiKey) {
+            showNotification('Config requerida', 'Añade VITE_GEMINI_API_KEY en .env.local para usar la IA.');
+            throw new Error('Gemini API key no configurada');
+        }
+        return new GoogleGenAI({ apiKey: geminiApiKey });
     };
     
     const requestConfirmation = (title: string, message: React.ReactNode, onConfirm: () => void) => {
@@ -916,7 +985,7 @@ const AppContent: React.FC = () => {
         const programmerNames = programmers.map(p => p.name).filter(name => name !== "Sin asignar");
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const ai = getGeminiClient();
             const response: GenerateContentResponse = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: `Analiza el siguiente resumen del día y extrae las tareas realizadas por cada programador. Responde únicamente con un objeto JSON. Los nombres de los programadores válidos son: ${programmerNames.join(', ')}.
@@ -945,24 +1014,40 @@ Resumen: "${summary}"`,
                 }
             });
 
-            const resultText = response.text;
+            const rawText = extractAiResponseText(response);
+            const resultText = sanitizeJsonPayload(rawText);
             if (!resultText) {
                 throw new Error('La IA no devolvió texto parseable.');
             }
-            const result = JSON.parse(resultText);
-            const logs = result.daily_logs as { programmer_name: string, tasks: string[] }[];
+            let result: { daily_logs?: AiDailyLog[] };
+            try {
+                result = JSON.parse(resultText);
+            } catch (parseError) {
+                console.error('Respuesta de IA no válida para bitácora diaria:', resultText);
+                throw parseError;
+            }
+            const logs = Array.isArray(result.daily_logs) ? result.daily_logs as AiDailyLog[] : [];
 
             if (!logs || logs.length === 0) {
                  showNotification('Sin resultados', 'La IA no pudo extraer información del resumen.');
                  return;
             }
 
+            let logsSaved = 0;
             for (const log of logs) {
+                if (!log || typeof log.programmer_name !== 'string') continue;
                 const programmer = programmers.find(p => p.name === log.programmer_name);
-                if (programmer) {
-                    const logText = log.tasks.join('\n');
+                const taskList = normalizeTaskList(log.tasks);
+                if (programmer && taskList.length > 0) {
+                    const logText = taskList.join('\n');
                     await firestore.saveDailyLog({ date, programmerId: programmer.id, text: logText });
+                    logsSaved++;
                 }
+            }
+
+            if (logsSaved === 0) {
+                showNotification('Sin resultados', 'La IA no encontró coincidencias con programadores válidos.');
+                return;
             }
 
             await refreshData();
@@ -988,7 +1073,7 @@ Resumen: "${summary}"`,
         }
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const ai = getGeminiClient();
             const response = await ai.models.generateContent({
                 model: "gemini-2.5-flash",
                 contents: `Analiza las siguientes notas de una reunión sobre el requisito "${task.requirement}" del día ${date}. Extrae un resumen, las acciones analizadas, las conclusiones, las decisiones tomadas y una lista de tareas asignadas a los programadores. Los programadores válidos son: [${involvedProgrammerNames.join(', ')}]. Si no se asigna una tarea a alguien, usa "Todos". Devuelve el resultado únicamente en formato JSON. Las acciones, conclusiones y decisiones deben ser arrays de strings.
@@ -1024,7 +1109,8 @@ ${meetingNotes}
                 },
             });
 
-            const resultText = (response.text || '').trim();
+            const rawText = extractAiResponseText(response);
+            const resultText = sanitizeJsonPayload(rawText);
             if (!resultText) {
                 throw new Error("La IA ha devuelto una respuesta vacía.");
             }
