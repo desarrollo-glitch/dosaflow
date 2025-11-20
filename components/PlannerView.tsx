@@ -369,50 +369,51 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ tasks, programmers, on
                 </div>
             </header>
             <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-                <table className="min-w-full border-collapse">
-                    <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-20">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-60 sticky left-0 bg-gray-50 dark:bg-gray-700 z-30 border-b border-gray-200 dark:border-gray-700">Programador</th>
+                <div className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex">
+                        <div className="w-60 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider sticky left-0 bg-gray-50 dark:bg-gray-700 z-30 border-r border-gray-200 dark:border-gray-700">Programador</div>
+                        <div className="flex flex-1">
                             {courseMonths.map(month => (
-                                <th key={month.key} className={`px-1 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider min-w-[10rem] w-40 transition-colors border-b border-l border-gray-200 dark:border-gray-700 ${month.key < currentMonthKey ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}>{month.displayName}</th>
+                                <div key={month.key} className={`flex-1 min-w-[8rem] px-1 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-l border-gray-200 dark:border-gray-700 ${month.key < currentMonthKey ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}>
+                                    {month.displayName}
+                                </div>
                             ))}
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-gray-800">
-                       {plannerLayout.map(({ programmer, tracks }) => {
-                            const rowHeight = Math.max(1, tracks.length) * 7.5;
-                            return (
-                                <React.Fragment key={programmer.id}>
-                                    {/* Task Row */}
-                                    <tr style={{ height: `${rowHeight}rem` }} className="relative">
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 w-60 z-10 align-top">
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {plannerLayout.map(({ programmer, tracks }) => {
+                        const rowHeight = Math.max(1, tracks.length) * 7.5;
+                        return (
+                            <React.Fragment key={programmer.id}>
+                                <div className="relative" style={{ minHeight: `${rowHeight}rem` }}>
+                                    <div className="flex h-full">
+                                        <div className="w-60 px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10 border-r border-gray-200 dark:border-gray-700">
                                             <div className="flex items-center">
                                                 <span className="w-4 h-4 rounded-full mr-3 flex-shrink-0" style={{ backgroundColor: programmer.color }}></span>
                                                 {programmer.name}
                                             </div>
-                                        </td>
-                                        
-                                        {/* Grid Cells Layer for Dropping */}
-                                        {courseMonths.map(month => {
-                                            const isPastMonth = month.key < currentMonthKey;
-                                            return (
-                                                 <td 
-                                                     key={month.key} 
-                                                     className={`p-0 align-top border-l border-gray-200 dark:border-gray-700 relative transition-colors ${isPastMonth ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`} 
-                                                     onDragOver={handleDragOver} 
-                                                     onDragLeave={handleDragLeave} 
-                                                     onDrop={(e) => handleDrop(e, programmer, month.key)}>
-                                                </td>
-                                            );
-                                        })}
-                                        
-                                        {/* Tasks Layer (Absolutely Positioned) */}
-                                        <td colSpan={courseMonths.length} className="p-0 absolute top-0 left-48 right-0 bottom-0 pointer-events-none">
-                                            <div className="relative w-full h-full">
-                                                {tracks.map((track, trackIndex) => 
+                                        </div>
+                                        <div className="flex-1 relative">
+                                            <div className="flex h-full">
+                                                {courseMonths.map(month => {
+                                                    const isPastMonth = month.key < currentMonthKey;
+                                                    return (
+                                                        <div
+                                                            key={month.key}
+                                                            className={`flex-1 border-l border-gray-200 dark:border-gray-700 relative transition-colors ${isPastMonth ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
+                                                            onDragOver={handleDragOver}
+                                                            onDragLeave={handleDragLeave}
+                                                            onDrop={(e) => handleDrop(e, programmer, month.key)}
+                                                        />
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="absolute inset-0 pointer-events-none">
+                                                {tracks.map((track, trackIndex) =>
                                                     track.map(task => (
                                                         <div key={task.id} className="pointer-events-auto">
-                                                            <TaskPill 
+                                                            <TaskPill
                                                                 task={task}
                                                                 programmerName={programmer.name}
                                                                 trackIndex={trackIndex}
@@ -427,27 +428,31 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ tasks, programmers, on
                                                     ))
                                                 )}
                                             </div>
-                                        </td>
-                                    </tr>
-                                    
-                                    {/* Add Task Row */}
-                                    <tr className="h-10">
-                                        <td className="sticky left-0 bg-gray-50 dark:bg-gray-800/50 w-60 z-10 border-b-2 border-gray-300 dark:border-gray-600"></td>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex h-10 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                                    <div className="w-60 sticky left-0 bg-gray-50 dark:bg-gray-800/50 z-10 border-r border-gray-200 dark:border-gray-700" />
+                                    <div className="flex flex-1">
                                         {courseMonths.map(month => (
-                                            <td key={`${month.key}-add`} className="p-0 align-middle border-l border-t border-gray-200 dark:border-gray-700 border-b-2 border-gray-300 dark:border-gray-600 relative transition-colors group bg-gray-50 dark:bg-gray-800/50">
-                                                <button onClick={() => onOpenPlannerModal(programmer, month.key)} className="w-full h-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity z-20" title={`Asignar tarea a ${programmer.name} en ${month.displayName}`}>
+                                            <div key={`${month.key}-add`} className="flex-1 border-l border-gray-200 dark:border-gray-700 relative group">
+                                                <button
+                                                    onClick={() => onOpenPlannerModal(programmer, month.key)}
+                                                    className="w-full h-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                                                    title={`Asignar tarea a ${programmer.name} en ${month.displayName}`}
+                                                >
                                                     <div className="bg-black/70 rounded-full p-1.5 backdrop-blur-sm shadow-lg">
                                                         <PlusIcon className="w-5 h-5" />
                                                     </div>
                                                 </button>
-                                            </td>
+                                            </div>
                                         ))}
-                                    </tr>
-                                </React.Fragment>
-                            )
-                        })}
-                    </tbody>
-                </table>
+                                    </div>
+                                </div>
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
