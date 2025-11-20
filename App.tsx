@@ -33,6 +33,8 @@ import { logOut } from './utils/auth';
 import { pickDriveFile } from './utils/drive';
 // FIX: Import GenerateContentResponse for explicit API response typing.
 import { GoogleGenAI, Type, GenerateContentResponse, ApiError } from '@google/genai';
+import { MobileAppView } from './components/MobileAppView';
+import { useIsMobile } from './src/hooks/useIsMobile';
 import { DEFAULT_REQUIREMENT_TYPE, REQUIREMENT_TYPE_OPTIONS, REQUIREMENT_TYPES } from './constants';
 
 const App: React.FC = () => {
@@ -304,6 +306,14 @@ const AppContent: React.FC = () => {
   const defaultVisibilityApplied = useRef(false);
 
   const { user } = useAuth();
+  const isMobileDevice = useIsMobile();
+  const [forceDesktop, setForceDesktop] = useState(false);
+  useEffect(() => {
+    if (!isMobileDevice && forceDesktop) {
+        setForceDesktop(false);
+    }
+  }, [isMobileDevice, forceDesktop]);
+  const shouldUseMobileView = isMobileDevice && !forceDesktop;
   const geminiModels = useMemo(() => {
     const envModels = geminiModel
         .split(',')
@@ -1522,91 +1532,124 @@ ${meetingNotes}
         }
     };
 
+  if (isLoading) {
+    return (
+      <div className={`${isDarkMode ? 'dark' : ''}`}>
+        <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+          <LoadingScreen />
+        </div>
+      </div>
+    );
+  }
+
+  const desktopLayout = (
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+      <Sidebar currentView={currentView} onSetView={setCurrentView} isOpen={isSidebarOpen} />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header
+          onAddTaskClick={handleAddTask}
+          isDarkMode={isDarkMode}
+          onToggleTheme={() => setIsDarkMode(!isDarkMode)}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          onExportCsv={exportToCsv}
+          user={user}
+          onLogout={logOut}
+        />
+        <main className="flex-1 overflow-y-auto">
+          {renderView()}
+        </main>
+      </div>
+    </div>
+  );
+
+  const mainContent = shouldUseMobileView ? (
+    <MobileAppView
+      userName={user?.displayName || user?.email}
+      tasks={tasks}
+      programmers={programmers}
+      meetings={meetings}
+      dailyLogs={dailyLogs}
+      onEditTask={handleEditTask}
+      onOpenMeetingModal={() => setMeetingModalContext({ isOpen: true, date: null })}
+      onOpenMeetingDetails={handleOpenMeetingDetailsModal}
+      onForceDesktop={() => setForceDesktop(true)}
+      onToggleTheme={() => setIsDarkMode(prev => !prev)}
+      isDarkMode={isDarkMode}
+      onRefresh={refreshData}
+    />
+  ) : desktopLayout;
+
+  const modalStack = (
+    <>
+      <TaskModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onSave={handleSaveTask}
+        programmers={programmers}
+        taskToEdit={taskToEdit}
+        modules={modules}
+        platforms={platforms}
+        targets={targets}
+        managedStatuses={managedStatuses}
+        onAddSubtask={handleAddSubtask}
+        onUpdateSubtask={handleUpdateSubtask}
+        onDeleteSubtask={handleDeleteSubtask}
+        onAddFileAttachment={handleAddFileAttachment}
+        onAddLinkAttachment={handleAddLinkAttachment}
+        onUpdateAttachment={handleUpdateAttachment}
+        onDeleteAttachment={handleDeleteAttachment}
+        onAddDriveAttachment={handleAddDriveAttachment}
+        isDriveReady={Boolean(googlePickerClientId && googlePickerApiKey)}
+      />
+      <PlannerTaskSelectorModal 
+        isOpen={isPlannerModalOpen}
+        onClose={() => setIsPlannerModalOpen(false)}
+        onAssign={handleAssignToPlanner}
+        tasks={tasks}
+        statusConfig={allItemsConfig}
+      />
+      <ApplySuggestionModal
+        isOpen={isApplyModalOpen}
+        onClose={() => setIsApplyModalOpen(false)}
+        suggestion={suggestionToApply}
+      />
+      <MeetingLogModal
+        isOpen={meetingModalContext.isOpen}
+        onClose={() => setMeetingModalContext({isOpen: false, date: null})}
+        date={meetingModalContext.date}
+        tasks={tasks}
+        programmers={programmers}
+        onProcessMeeting={handleProcessMeeting}
+      />
+      <MeetingDetailsModal
+        isOpen={meetingDetailsModalState.isOpen}
+        onClose={() => setMeetingDetailsModalState({ isOpen: false, meeting: null })}
+        meeting={meetingDetailsModalState.meeting}
+        onUpdateMeeting={handleUpdateMeeting}
+        onDeleteMeeting={handleDeleteMeeting}
+        tasks={tasks}
+        programmers={programmers}
+      />
+      <ConfirmationModal
+        isOpen={confirmationState.isOpen}
+        onClose={closeConfirmation}
+        onConfirm={confirmationState.onConfirm}
+        title={confirmationState.title}
+        message={confirmationState.message}
+      />
+      <Toast
+        show={notification.show}
+        message={notification.message}
+        subMessage={notification.subMessage}
+        onClose={() => setNotification({ ...notification, show: false })}
+      />
+    </>
+  );
+
   return (
-    <div className={`flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 ${isDarkMode ? 'dark' : ''}`}>
-      {isLoading ? (
-        <LoadingScreen />
-      ) : (
-        <>
-          <Sidebar currentView={currentView} onSetView={setCurrentView} isOpen={isSidebarOpen} />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <Header
-              onAddTaskClick={handleAddTask}
-              isDarkMode={isDarkMode}
-              onToggleTheme={() => setIsDarkMode(!isDarkMode)}
-              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-              onExportCsv={exportToCsv}
-              user={user}
-              onLogout={logOut}
-            />
-            <main className="flex-1 overflow-y-auto">
-              {renderView()}
-            </main>
-          </div>
-          <TaskModal
-            isOpen={isModalOpen}
-            onClose={handleCloseModal}
-            onSave={handleSaveTask}
-            programmers={programmers}
-            taskToEdit={taskToEdit}
-            modules={modules}
-            platforms={platforms}
-            targets={targets}
-            managedStatuses={managedStatuses}
-            onAddSubtask={handleAddSubtask}
-            onUpdateSubtask={handleUpdateSubtask}
-            onDeleteSubtask={handleDeleteSubtask}
-            onAddFileAttachment={handleAddFileAttachment}
-            onAddLinkAttachment={handleAddLinkAttachment}
-            onUpdateAttachment={handleUpdateAttachment}
-            onDeleteAttachment={handleDeleteAttachment}
-            onAddDriveAttachment={handleAddDriveAttachment}
-            isDriveReady={Boolean(googlePickerClientId && googlePickerApiKey)}
-          />
-           <PlannerTaskSelectorModal 
-                isOpen={isPlannerModalOpen}
-                onClose={() => setIsPlannerModalOpen(false)}
-                onAssign={handleAssignToPlanner}
-                tasks={tasks}
-                statusConfig={allItemsConfig}
-           />
-           <ApplySuggestionModal
-                isOpen={isApplyModalOpen}
-                onClose={() => setIsApplyModalOpen(false)}
-                suggestion={suggestionToApply}
-           />
-           <MeetingLogModal
-                isOpen={meetingModalContext.isOpen}
-                onClose={() => setMeetingModalContext({isOpen: false, date: null})}
-                date={meetingModalContext.date}
-                tasks={tasks}
-                programmers={programmers}
-                onProcessMeeting={handleProcessMeeting}
-           />
-           <MeetingDetailsModal
-                isOpen={meetingDetailsModalState.isOpen}
-                onClose={() => setMeetingDetailsModalState({ isOpen: false, meeting: null })}
-                meeting={meetingDetailsModalState.meeting}
-                onUpdateMeeting={handleUpdateMeeting}
-                onDeleteMeeting={handleDeleteMeeting}
-                tasks={tasks}
-                programmers={programmers}
-           />
-           <ConfirmationModal
-                isOpen={confirmationState.isOpen}
-                onClose={closeConfirmation}
-                onConfirm={confirmationState.onConfirm}
-                title={confirmationState.title}
-                message={confirmationState.message}
-           />
-          <Toast
-            show={notification.show}
-            message={notification.message}
-            subMessage={notification.subMessage}
-            onClose={() => setNotification({ ...notification, show: false })}
-          />
-        </>
-      )}
+    <div className={`${isDarkMode ? 'dark' : ''}`}>
+      {mainContent}
+      {modalStack}
     </div>
   );
 };
