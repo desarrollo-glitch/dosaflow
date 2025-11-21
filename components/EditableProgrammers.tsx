@@ -119,13 +119,13 @@ export const EditableProgrammers: React.FC<EditableProgrammersProps> = ({ value,
         className="cursor-pointer min-h-[36px] p-1 flex items-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 w-full"
       >
         <div className="flex flex-wrap gap-1">
-            {programmersToShow.map(name => {
+            {programmersToShow.map((name, idx) => {
                 const programmer = programmerOptionsMap.get(name);
                 const color = programmer?.color || '#ccc';
                 const textColor = isColorLight(color) ? 'text-gray-800' : 'text-white';
                 return (
                     <span
-                        key={name}
+                        key={`${name}-${idx}`}
                         className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${textColor}`}
                         style={{ backgroundColor: color }}
                     >

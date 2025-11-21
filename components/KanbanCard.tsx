@@ -124,12 +124,12 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({ task, onEdit, allItemsCo
         <div className="flex items-center text-xs text-gray-600 dark:text-gray-400">
             <span className="w-4 h-4 mr-1.5 flex-shrink-0"><UserIcon className="text-gray-500" /></span>
             <div className="flex flex-wrap gap-1">
-                {task.assignments.map(({ programmerName }) => {
+                {task.assignments.map(({ programmerName }, idx) => {
                     const programmerConfig = allItemsConfig[programmerName];
                     const pColor = programmerConfig?.color || '#ccc';
                     const pTextColor = isColorLight(pColor) ? 'text-gray-800' : 'text-white';
                     return (
-                        <span key={programmerName} style={{ backgroundColor: pColor }} className={`px-1.5 py-0.5 inline-flex text-[11px] leading-4 font-semibold rounded-full ${pTextColor}`}>
+                        <span key={`${programmerName}-${idx}`} style={{ backgroundColor: pColor }} className={`px-1.5 py-0.5 inline-flex text-[11px] leading-4 font-semibold rounded-full ${pTextColor}`}>
                             {programmerName}
                         </span>
                     );

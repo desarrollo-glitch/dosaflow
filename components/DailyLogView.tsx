@@ -41,6 +41,16 @@ const toDateString = (date: Date): string => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+const getMeetingEndTimestamp = (meeting: Meeting) => {
+    const time = meeting.endTime || '23:59';
+    const parsed = meeting.date ? new Date(`${meeting.date}T${time}`) : new Date(NaN);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
+const getMeetingTimeRange = (meeting: Meeting) => meeting.startTime && meeting.endTime
+    ? `${meeting.startTime} - ${meeting.endTime}`
+    : 'Hora no registrada';
+
 const isColorLight = (colorString: string) => {
     if (!colorString) return true;
     let r, g, b;
@@ -104,6 +114,7 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
             }
             map.get(meeting.date)!.push(meeting);
         });
+        map.forEach(list => list.sort((a, b) => getMeetingEndTimestamp(a) - getMeetingEndTimestamp(b)));
         return map;
     }, [meetings]);
 
@@ -253,17 +264,23 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
                             )}
                         </div>
                         <div className="mt-1 space-y-1 overflow-y-auto">
-                             {meetingsOnThisDay.map(meeting => (
+                             {meetingsOnThisDay.map(meeting => {
+                                const isPrivate = (meeting.visibility || 'public') === 'private';
+                                const base = isPrivate ? 'bg-emerald-100 dark:bg-emerald-900/50 hover:bg-emerald-200 dark:hover:bg-emerald-900/70' : 'bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70';
+                                return (
                                 <div
                                     key={meeting.id}
                                     onClick={() => onOpenMeetingDetailsModal(meeting)}
-                                    className="flex items-center cursor-pointer p-1 rounded-md bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70"
+                                    className={`flex items-center cursor-pointer p-1 rounded-md ${base}`}
                                     title={`Reunión: ${meeting.requirementName}`}
                                 >
                                     <ChatBubbleLeftRightIcon className="w-3 h-3 mr-1.5 text-blue-600 dark:text-blue-300 flex-shrink-0" />
-                                    <span className="text-xs font-medium text-blue-800 dark:text-blue-200 truncate">{meeting.requirementName}</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-medium text-blue-800 dark:text-blue-200 truncate">{meeting.requirementName}</span>
+                                        <span className="text-[10px] text-blue-700 dark:text-blue-100">{getMeetingTimeRange(meeting)}</span>
+                                    </div>
                                 </div>
-                            ))}
+                            )})}
                             {programmersWithLogs.map(p => (
                                 <div key={p.id} onClick={() => handleOpenLogModal(dateStr, p)} className="flex items-center cursor-pointer p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50">
                                     <span className="w-2.5 h-2.5 rounded-full mr-2 flex-shrink-0" style={{ backgroundColor: p.color }}></span>
@@ -333,19 +350,23 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
                                 </div>
                             </div>
                             <div className="space-y-2 overflow-y-auto">
-                                {meetingsOnThisDay.map(meeting => (
+                                {meetingsOnThisDay.map(meeting => {
+                                    const isPrivate = (meeting.visibility || 'public') === 'private';
+                                    const base = isPrivate ? 'bg-emerald-100 dark:bg-emerald-900/50 hover:bg-emerald-200 dark:hover:bg-emerald-900/70' : 'bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70';
+                                    return (
                                     <div
                                         key={meeting.id}
                                         onClick={() => onOpenMeetingDetailsModal(meeting)}
-                                        className="p-2 rounded-lg cursor-pointer bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70"
+                                        className={`p-2 rounded-lg cursor-pointer ${base}`}
                                     >
                                         <div className="flex items-center">
                                             <ChatBubbleLeftRightIcon className="w-4 h-4 mr-2 text-blue-600 dark:text-blue-300 flex-shrink-0" />
                                             <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Reunión</p>
                                         </div>
                                         <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 pl-6 truncate">{meeting.requirementName}</p>
+                                        <p className="text-[11px] text-blue-700 dark:text-blue-300 pl-6">{getMeetingTimeRange(meeting)}</p>
                                     </div>
-                                ))}
+                                )})}
                                 {programmersWithLogs.map(p => {
                                     const logText = dailyLogsMap.get(`${dateStr}_${p.id}`) || '';
                                     const logLines = parseLogLines(logText);
@@ -435,12 +456,13 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({ programmers, dailyLo
                                  <div
                                     key={meeting.id}
                                     onClick={() => onOpenMeetingDetailsModal(meeting)}
-                                    className="p-3 rounded-lg cursor-pointer bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70"
+                                    className={`p-3 rounded-lg cursor-pointer ${(meeting.visibility || 'public') === 'private' ? 'bg-emerald-100 dark:bg-emerald-900/50 hover:bg-emerald-200 dark:hover:bg-emerald-900/70' : 'bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70'}`}
                                  >
                                     <div className="flex items-start">
                                          <ChatBubbleLeftRightIcon className="w-5 h-5 mr-3 text-blue-600 dark:text-blue-300 flex-shrink-0 mt-0.5" />
                                          <div className="flex-grow">
                                             <p className="font-semibold text-blue-800 dark:text-blue-200">Reunión sobre "{meeting.requirementName}"</p>
+                                            <p className="text-xs text-blue-700 dark:text-blue-300">{getMeetingTimeRange(meeting)}</p>
                                             <p className="text-xs text-blue-600 dark:text-blue-400">Haz clic para ver detalles y tareas asignadas.</p>
                                              {participants.length > 0 && (
                                                 <div className="mt-2 flex flex-wrap gap-1">

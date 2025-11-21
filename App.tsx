@@ -86,7 +86,7 @@ const App: React.FC = () => {
         return <PendingAccessView email={user.email ?? undefined} status={userAccessRecord.status} />;
     }
 
-    return <AppContent />;
+    return <AppContent userAccessRecord={userAccessRecord} />;
 };
 
 const customProgrammerOrder = [
@@ -254,7 +254,7 @@ const meetingOpenAiSchema = {
     additionalProperties: false
 };
 
-const AppContent: React.FC = () => {
+const AppContent: React.FC<{ userAccessRecord: UserAccessDoc }> = ({ userAccessRecord }) => {
   const googlePickerClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const googlePickerApiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
   const geminiApiKey = (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY) as string | undefined;
@@ -308,6 +308,10 @@ const AppContent: React.FC = () => {
   const { user } = useAuth();
   const isMobileDevice = useIsMobile();
   const [forceDesktop, setForceDesktop] = useState(false);
+  const approvedUsers = useMemo(() => userAccessRequests.filter(u => u.status === 'approved'), [userAccessRequests]);
+  const currentUserAccessId = userAccessRecord?.docId || userAccessRecord?.id || '';
+  const visibleMeetings = useMemo(() => meetings.filter(m => (m.visibility || 'public') === 'public' || (m.allowedUserIds || []).includes(currentUserAccessId)), [meetings, currentUserAccessId]);
+
   useEffect(() => {
     if (!isMobileDevice && forceDesktop) {
         setForceDesktop(false);
@@ -397,6 +401,17 @@ const AppContent: React.FC = () => {
         if (!user) return;
         try {
             const data = await firestore.getAllData();
+            const meetingsNeedingVisibility = data.meetings.filter(meeting => !meeting.visibility);
+            if (meetingsNeedingVisibility.length > 0) {
+                await Promise.all(meetingsNeedingVisibility.map(meeting => {
+                    const { docId, ...rest } = meeting;
+                    return firestore.saveMeeting({
+                        ...rest,
+                        visibility: 'public',
+                        allowedUserIds: [],
+                    });
+                }));
+            }
 
             const tasksWithType = data.tasks.map(task => ({
                 ...task,
@@ -421,6 +436,10 @@ const AppContent: React.FC = () => {
             const tasksMap: Map<string, TaskDoc> = new Map(tasksWithType.map(t => [t.id, t]));
             const joinedMeetings: Meeting[] = data.meetings.map(meetingDoc => ({
                 ...meetingDoc,
+                startTime: meetingDoc.startTime || '',
+                endTime: meetingDoc.endTime || '',
+                visibility: meetingDoc.visibility || 'public',
+                allowedUserIds: Array.isArray(meetingDoc.allowedUserIds) ? meetingDoc.allowedUserIds : [],
                 requirementName: tasksMap.get(meetingDoc.requirementId)?.requirement || 'N/A',
             }));
 
@@ -1300,10 +1319,20 @@ Resumen: "${summary}"`,
         }
     };
     
-    const handleProcessMeeting = async (requirementId: string, meetingNotes: string, date: string) => {
+    const handleProcessMeeting = async (requirementId: string, meetingNotes: string, date: string, startTime: string, endTime: string, visibility: 'public' | 'private', allowedUserIds: string[]) => {
         const task = tasks.find(t => t.id === requirementId);
         if (!task) {
             showNotification('Error', 'No se encontró el requisito seleccionado.');
+            return;
+        }
+
+        if (!startTime || !endTime) {
+            showNotification('Error', 'Indica la hora de inicio y fin de la reunión.');
+            return;
+        }
+
+        if (startTime >= endTime) {
+            showNotification('Error', 'La hora de fin debe ser posterior a la de inicio.');
             return;
         }
 
@@ -1344,6 +1373,10 @@ ${meetingNotes}
             const newMeeting: Omit<MeetingDoc, 'docId'> = {
                 id: meetingId,
                 date,
+                startTime,
+                endTime,
+                visibility,
+                allowedUserIds,
                 requirementId,
                 requirementName: task.requirement,
                 summary: structuredResult.summary || 'N/A',
@@ -1368,14 +1401,27 @@ ${meetingNotes}
         }
     };
     
+    const isMeetingVisible = useCallback((meeting: Meeting) => {
+        if ((meeting.visibility || 'public') === 'public') return true;
+        return (meeting.allowedUserIds || []).includes(currentUserAccessId);
+    }, [currentUserAccessId]);
+
     const handleOpenMeetingDetailsModal = (meeting: Meeting) => {
+        if (!isMeetingVisible(meeting)) {
+            showNotification('Acceso restringido', 'No tienes permiso para ver esta reunión privada.');
+            return;
+        }
         setMeetingDetailsModalState({ isOpen: true, meeting });
     };
 
     const handleUpdateMeeting = async (updatedMeeting: Meeting, originalDocId: string) => {
         try {
             const newDocId = `${updatedMeeting.date}_${updatedMeeting.requirementId}`;
-            const { docId, ...meetingToSave } = updatedMeeting;
+            const { docId, ...meetingToSave } = {
+                ...updatedMeeting,
+                visibility: updatedMeeting.visibility || 'public',
+                allowedUserIds: updatedMeeting.allowedUserIds || [],
+            };
 
             if (newDocId !== originalDocId) {
                 // ID has changed, so we delete the old one and create a new one.
@@ -1504,13 +1550,13 @@ ${meetingNotes}
                             onDeleteLog={handleDeleteDailyLog}
                             onProcessSummary={handleProcessDailySummary}
                             onOpenMeetingModal={(date) => setMeetingModalContext({isOpen: true, date: date})}
-                            meetings={meetings}
+                            meetings={visibleMeetings}
                             tasks={tasks}
                             onOpenMeetingDetailsModal={handleOpenMeetingDetailsModal}
                         />;
              case 'meetings':
                 return <MeetingsView 
-                            meetings={meetings}
+                            meetings={visibleMeetings}
                             tasks={tasks}
                             programmers={programmers}
                             onOpenMeetingModal={() => setMeetingModalContext({isOpen: true, date: null})}
@@ -1567,7 +1613,7 @@ ${meetingNotes}
       userName={user?.displayName || user?.email}
       tasks={tasks}
       programmers={programmers}
-      meetings={meetings}
+      meetings={visibleMeetings}
       dailyLogs={dailyLogs}
       onEditTask={handleEditTask}
       onOpenMeetingModal={() => setMeetingModalContext({ isOpen: true, date: null })}
@@ -1619,6 +1665,7 @@ ${meetingNotes}
         date={meetingModalContext.date}
         tasks={tasks}
         programmers={programmers}
+        users={approvedUsers}
         onProcessMeeting={handleProcessMeeting}
       />
       <MeetingDetailsModal
@@ -1629,6 +1676,7 @@ ${meetingNotes}
         onDeleteMeeting={handleDeleteMeeting}
         tasks={tasks}
         programmers={programmers}
+        users={approvedUsers}
       />
       <ConfirmationModal
         isOpen={confirmationState.isOpen}

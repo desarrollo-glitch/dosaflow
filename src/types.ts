@@ -164,6 +164,10 @@ export interface Meeting {
   id: string; // YYYY-MM-DD_requirementId
   docId: string;
   date: string; // 'YYYY-MM-DD'
+  startTime?: string; // 'HH:MM'
+  endTime?: string; // 'HH:MM'
+  visibility: 'public' | 'private';
+  allowedUserIds: string[];
   requirementId: string;
   requirementName: string; // For display purposes
   summary: string;
@@ -178,6 +182,10 @@ export interface MeetingDoc {
   id: string; // YYYY-MM-DD_requirementId
   docId: string;
   date: string;
+  startTime?: string;
+  endTime?: string;
+  visibility?: 'public' | 'private';
+  allowedUserIds?: string[];
   requirementId: string;
   requirementName: string;
   summary: string;

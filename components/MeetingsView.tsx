@@ -38,11 +38,17 @@ const isColorLight = (colorString: string) => {
     return luminance > 0.5;
 };
 
+const getMeetingEndTimestamp = (meeting: Meeting) => {
+    const fallbackTime = meeting.endTime || '23:59';
+    const parsed = meeting.date ? new Date(`${meeting.date}T${fallbackTime}`) : new Date(NaN);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
 // --- SUB-VIEWS ---
 
 const TimelineView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal' | 'onUpdateMeeting'>> = ({ meetings, tasks, programmers, onOpenMeetingDetailsModal }) => {
     const sortedMeetings = useMemo(() => {
-        return [...meetings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return [...meetings].sort((a, b) => getMeetingEndTimestamp(b) - getMeetingEndTimestamp(a));
     }, [meetings]);
 
     return (
@@ -71,7 +77,7 @@ const ByRequirementView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal' |
         });
         // Sort meetings within each group
         Object.values(groups).forEach(group => {
-            group.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            group.sort((a, b) => getMeetingEndTimestamp(b) - getMeetingEndTimestamp(a));
         });
         return groups;
     }, [meetings]);
@@ -131,7 +137,7 @@ const ByProgrammerView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal'>> 
         });
         
         programmerMap.forEach(tasks => {
-            tasks.sort((a, b) => new Date(b.meeting.date).getTime() - new Date(a.meeting.date).getTime());
+            tasks.sort((a, b) => getMeetingEndTimestamp(b.meeting) - getMeetingEndTimestamp(a.meeting));
         });
 
         return programmerMap;
@@ -176,7 +182,7 @@ const ByProgrammerView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal'>> 
                     a: { meetingInfo: Meeting; tasks: MeetingTask[] },
                     b: { meetingInfo: Meeting; tasks: MeetingTask[] }
                 ) => {
-                    return new Date(b.meetingInfo.date).getTime() - new Date(a.meetingInfo.date).getTime();
+                    return getMeetingEndTimestamp(b.meetingInfo) - getMeetingEndTimestamp(a.meetingInfo);
                 });
 
                 return (
@@ -186,7 +192,7 @@ const ByProgrammerView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal'>> 
                         </header>
                         <div className="p-4 space-y-4 flex-grow overflow-y-auto">
                             {sortedMeetingGroups.map(({ meetingInfo, tasks: meetingTasks }) => (
-                                <div key={meetingInfo.docId} className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-md">
+                                <div key={meetingInfo.docId} className={`${(meetingInfo.visibility || 'public') === 'private' ? 'bg-emerald-50 dark:bg-emerald-900/40' : 'bg-gray-50 dark:bg-gray-900/50'} p-3 rounded-md`}>
                                     <div 
                                         className="flex justify-between items-center cursor-pointer hover:opacity-80" 
                                         onClick={() => onOpenMeetingDetailsModal(meetingInfo)}
@@ -196,6 +202,9 @@ const ByProgrammerView: React.FC<Omit<MeetingsViewProps, 'onOpenMeetingModal'>> 
                                             <p className="font-semibold text-sm text-gray-800 dark:text-gray-200">{meetingInfo.requirementName}</p>
                                             <p className="text-xs text-gray-500 dark:text-gray-400">
                                                 {new Date(meetingInfo.date + 'T00:00:00').toLocaleDateString('es-ES', { day:'numeric', month: 'long' })}
+                                            </p>
+                                            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                                {meetingInfo.startTime && meetingInfo.endTime ? `${meetingInfo.startTime} - ${meetingInfo.endTime}` : 'Hora no registrada'}
                                             </p>
                                         </div>
                                     </div>

@@ -30,7 +30,7 @@ const isColorLight = (colorString: string) => {
 };
 
 export const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, tasks, programmers, onEdit }) => {
-    const { requirementName, date, tasks: meetingTasks } = meeting;
+    const { requirementName, date, tasks: meetingTasks, startTime, endTime, visibility } = meeting;
 
     const taskForMeeting = tasks.find(t => t.id === meeting.requirementId);
     const participants = taskForMeeting ? taskForMeeting.assignments
@@ -46,11 +46,16 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, tasks, progra
         month: 'long',
         year: 'numeric'
     });
+    const formattedTimeRange = startTime && endTime ? `${startTime} - ${endTime}` : 'Hora no registrada';
+
+    const baseBg = visibility === 'private' ? 'bg-emerald-50 dark:bg-emerald-900/30' : 'bg-blue-50 dark:bg-blue-900/20';
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col border-l-4 border-brand-primary">
+        <div className={`${baseBg} rounded-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col border-l-4 border-brand-primary`}>
             <header className="p-4 border-b border-gray-200 dark:border-gray-700">
                 <p className="text-sm font-semibold text-brand-primary dark:text-indigo-400">{formattedDate}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formattedTimeRange}</p>
+                <p className="text-[11px] uppercase font-semibold tracking-wide mt-1 text-gray-600 dark:text-gray-400">{visibility === 'private' ? 'Privada' : 'Pública'}</p>
                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mt-1 truncate" title={requirementName}>
                     {requirementName}
                 </h3>

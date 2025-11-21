@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Task, ManagedItem } from '../types';
+import { Task, ManagedItem, UserAccessDoc } from '../types';
 import { SpinnerIcon, XIcon } from './Icons';
 
 interface MeetingLogModalProps {
@@ -8,15 +8,20 @@ interface MeetingLogModalProps {
     tasks: Task[];
     programmers: ManagedItem[];
     date: string | null;
-    onProcessMeeting: (requirementId: string, meetingNotes: string, date: string) => Promise<void>;
+    users: UserAccessDoc[];
+    onProcessMeeting: (requirementId: string, meetingNotes: string, date: string, startTime: string, endTime: string, visibility: 'public' | 'private', allowedUserIds: string[]) => Promise<void>;
 }
 
-export const MeetingLogModal: React.FC<MeetingLogModalProps> = ({ isOpen, onClose, tasks, programmers, date, onProcessMeeting }) => {
+export const MeetingLogModal: React.FC<MeetingLogModalProps> = ({ isOpen, onClose, tasks, programmers, users, date, onProcessMeeting }) => {
     const [step, setStep] = useState(1);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [meetingNotes, setMeetingNotes] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [startTime, setStartTime] = useState('');
+    const [endTime, setEndTime] = useState('');
+    const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+    const [allowedUserIds, setAllowedUserIds] = useState<string[]>([]);
 
     const effectiveDate = useMemo(() => {
         if (date) return date;
@@ -32,6 +37,10 @@ export const MeetingLogModal: React.FC<MeetingLogModalProps> = ({ isOpen, onClos
             setMeetingNotes('');
             setIsProcessing(false);
             setSearchTerm('');
+            setStartTime('');
+            setEndTime('');
+            setVisibility('public');
+            setAllowedUserIds([]);
         }
     }, [isOpen]);
 
@@ -47,11 +56,16 @@ export const MeetingLogModal: React.FC<MeetingLogModalProps> = ({ isOpen, onClos
         return tasks.find(t => t.id === selectedTaskId);
     }, [tasks, selectedTaskId]);
 
+    const toggleAllowedUser = (id: string) => {
+        setAllowedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
+
     const handleProcess = async () => {
-        if (!selectedTaskId || !meetingNotes.trim() || !effectiveDate) return;
+        if (!selectedTaskId || !meetingNotes.trim() || !effectiveDate || !startTime || !endTime) return;
+        if (visibility === 'private' && allowedUserIds.length === 0) return;
         setIsProcessing(true);
         try {
-            await onProcessMeeting(selectedTaskId, meetingNotes, effectiveDate);
+            await onProcessMeeting(selectedTaskId, meetingNotes, effectiveDate, startTime, endTime, visibility, visibility === 'private' ? allowedUserIds : []);
             // The parent component will close the modal on success
         } finally {
             setIsProcessing(false);
@@ -83,6 +97,71 @@ export const MeetingLogModal: React.FC<MeetingLogModalProps> = ({ isOpen, onClos
                             onChange={e => setSearchTerm(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm mb-3 bg-white dark:bg-gray-700"
                         />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hora inicio</label>
+                                <input
+                                    type="time"
+                                    value={startTime}
+                                    onChange={e => setStartTime(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hora fin</label>
+                                <input
+                                    type="time"
+                                    value={endTime}
+                                    onChange={e => setEndTime(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700"
+                                />
+                            </div>
+                        </div>
+                        <div className="mb-3 space-y-2">
+                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Visibilidad</p>
+                            <div className="flex flex-wrap gap-3">
+                                <label className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200">
+                                    <input
+                                        type="radio"
+                                        name="visibility"
+                                        value="public"
+                                        checked={visibility === 'public'}
+                                        onChange={() => setVisibility('public')}
+                                    />
+                                    <span>Pública (todos los usuarios)</span>
+                                </label>
+                                <label className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200">
+                                    <input
+                                        type="radio"
+                                        name="visibility"
+                                        value="private"
+                                        checked={visibility === 'private'}
+                                        onChange={() => setVisibility('private')}
+                                    />
+                                    <span>Privada (solo seleccionados)</span>
+                                </label>
+                            </div>
+                            {visibility === 'private' && (
+                                <div className="border rounded-md p-2 max-h-32 overflow-y-auto dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+                                    {users.length === 0 && (
+                                        <p className="text-xs text-gray-500">No hay usuarios aprobados.</p>
+                                    )}
+                                    {users.map(u => (
+                                        <label key={u.docId} className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200 py-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={allowedUserIds.includes(u.docId)}
+                                                onChange={() => toggleAllowedUser(u.docId)}
+                                            />
+                                            <span>{u.displayName || u.email}</span>
+                                        </label>
+                                    ))}
+                                    {visibility === 'private' && allowedUserIds.length === 0 && users.length > 0 && (
+                                        <p className="text-xs text-red-500 mt-1">Selecciona al menos un usuario.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                         <div className="max-h-60 overflow-y-auto border dark:border-gray-600 rounded-md p-2">
                             {filteredTasks.map(task => (
                                 <div
@@ -114,7 +193,17 @@ export const MeetingLogModal: React.FC<MeetingLogModalProps> = ({ isOpen, onClos
                             </div>
                         )}
                         <footer className="flex justify-end pt-4 mt-4 border-t dark:border-gray-700">
-                            <button onClick={() => setStep(2)} disabled={!selectedTaskId} className="bg-brand-primary hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed">
+                            <button
+                                onClick={() => setStep(2)}
+                                disabled={
+                                    !selectedTaskId ||
+                                    !startTime ||
+                                    !endTime ||
+                                    (startTime && endTime && startTime >= endTime) ||
+                                    (visibility === 'private' && allowedUserIds.length === 0)
+                                }
+                                className="bg-brand-primary hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
                                 Siguiente
                             </button>
                         </footer>
@@ -128,6 +217,15 @@ export const MeetingLogModal: React.FC<MeetingLogModalProps> = ({ isOpen, onClos
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-md mb-4 space-y-1">
                             <p className="text-sm text-gray-600 dark:text-gray-400">Requisito: <strong className="text-gray-800 dark:text-gray-200">{selectedTask.requirement}</strong></p>
                             <p className="text-sm text-gray-600 dark:text-gray-400">Fecha: <strong className="text-gray-800 dark:text-gray-200">{formattedDate}</strong></p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Horario: <strong className="text-gray-800 dark:text-gray-200">{startTime && endTime ? `${startTime} - ${endTime}` : 'Completa las horas en el paso anterior'}</strong></p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Visibilidad: <strong className="text-gray-800 dark:text-gray-200">{visibility === 'public' ? 'Pública' : 'Privada'}</strong>
+                                {visibility === 'private' && (
+                                    <span className="block text-xs text-gray-500 mt-1">
+                                        Acceso: {allowedUserIds.length > 0 ? `${allowedUserIds.length} usuario(s)` : 'Selecciona usuarios'}
+                                    </span>
+                                )}
+                            </p>
                         </div>
                         <textarea
                             value={meetingNotes}

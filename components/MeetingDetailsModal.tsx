@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Meeting, MeetingTask, Task, ManagedItem } from '../types';
+import { Meeting, MeetingTask, Task, ManagedItem, UserAccessDoc } from '../types';
 import { XIcon, EditIcon, PlusIcon, TrashIcon, PrinterIcon } from './Icons';
 
 interface MeetingDetailsModalProps {
@@ -10,6 +10,7 @@ interface MeetingDetailsModalProps {
     onDeleteMeeting: (docId: string) => void;
     tasks: Task[];
     programmers: ManagedItem[];
+    users: UserAccessDoc[];
 }
 
 const DetailSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -66,7 +67,7 @@ const EditableListSection: React.FC<{
 );
 };
 
-export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen, onClose, meeting, onUpdateMeeting, onDeleteMeeting, tasks, programmers }) => {
+export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen, onClose, meeting, onUpdateMeeting, onDeleteMeeting, tasks, programmers, users }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [localMeeting, setLocalMeeting] = useState<Meeting | null>(null);
 
@@ -84,6 +85,10 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
         if (meeting) {
             const sanitizedMeeting = {
                 ...meeting,
+                startTime: meeting.startTime || '',
+                endTime: meeting.endTime || '',
+                visibility: meeting.visibility || 'public',
+                allowedUserIds: Array.isArray(meeting.allowedUserIds) ? meeting.allowedUserIds : [],
                 actionsAnalyzed: ensureArray(meeting.actionsAnalyzed),
                 conclusions: ensureArray(meeting.conclusions),
                 decisions: ensureArray(meeting.decisions),
@@ -96,15 +101,34 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
     const availableProgrammers = useMemo(() => {
         return [...programmers.filter(p => p.name !== "Sin asignar"), { id: 'all', docId: 'all', name: 'Todos', color: '#ccc' }];
     }, [programmers]);
+    const approvedUsers = useMemo(() => users.filter(u => u.status === 'approved'), [users]);
+
+    const toggleAllowedUser = (id: string) => {
+        setLocalMeeting(prev => {
+            if (!prev) return null;
+            const already = prev.allowedUserIds.includes(id);
+            const updated = already ? prev.allowedUserIds.filter(x => x !== id) : [...prev.allowedUserIds, id];
+            return { ...prev, allowedUserIds: updated };
+        });
+    };
+    
+    const allowedUsersNames = useMemo(() => {
+        if (!localMeeting) return [];
+        if (localMeeting.visibility === 'public') return ['Todos los usuarios'];
+        return (localMeeting.allowedUserIds || []).map(id => approvedUsers.find(u => u.docId === id)?.displayName || approvedUsers.find(u => u.docId === id)?.email || id);
+    }, [localMeeting, approvedUsers]);
 
     if (!isOpen || !localMeeting || !meeting) return null;
     
     const handlePrint = () => {
         const printWindow = window.open('', '_blank');
         if (printWindow) {
-            const { requirementName, date, summary, actionsAnalyzed, conclusions, decisions, tasks } = localMeeting;
+            const { requirementName, date, startTime, endTime, summary, actionsAnalyzed, conclusions, decisions, tasks, visibility, allowedUserIds } = localMeeting;
             const participants = new Set<string>();
             tasks.forEach(task => participants.add(task.programmer));
+            const allowedList = visibility === 'public'
+                ? ['Pública']
+                : allowedUserIds.map(id => approvedUsers.find(u => u.docId === id)?.displayName || approvedUsers.find(u => u.docId === id)?.email || id);
 
             const printContent = `
                 <html>
@@ -124,6 +148,8 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
                            <h1 class="text-3xl font-bold text-gray-800">Informe de Reunión</h1>
                            <h2 class="text-xl font-semibold text-indigo-600">${requirementName}</h2>
                            <p class="text-md text-gray-500">${new Date(date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                           <p class="text-sm text-gray-500">${startTime && endTime ? `${startTime} - ${endTime}` : 'Horario no especificado'}</p>
+                           <p class="text-sm text-gray-500">Visibilidad: ${visibility === 'public' ? 'Pública' : 'Privada'}</p>
                         </header>
                         
                         <main>
@@ -233,6 +259,10 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
 
     const handleSaveChanges = async () => {
         if (localMeeting) {
+            if (localMeeting.visibility === 'private' && (!localMeeting.allowedUserIds || localMeeting.allowedUserIds.length === 0)) {
+                alert('Selecciona al menos un usuario para una reunión privada.');
+                return;
+            }
             await onUpdateMeeting(localMeeting, meeting.docId);
             onClose();
         }
@@ -250,6 +280,10 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
     };
 
     const formattedDate = new Date(localMeeting.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const visibilityLabel = localMeeting.visibility === 'private' ? 'Privada' : 'Pública';
+    const formattedTimeRange = localMeeting.startTime && localMeeting.endTime
+        ? `${localMeeting.startTime} - ${localMeeting.endTime}`
+        : 'Hora no especificada';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50" onClick={onClose}>
@@ -257,11 +291,20 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
                 <header className="flex-shrink-0">
                     <div className="flex justify-between items-start">
                         <div>
-                            {isEditing ? (
-                                <input type="date" value={localMeeting.date} onChange={e => handleFieldChange('date', e.target.value)} className="text-sm p-1 border rounded-md border-gray-300 dark:border-gray-400 bg-white dark:bg-white text-gray-900 dark:text-gray-900 dark:[color-scheme:light]" />
-                            ) : (
-                                <p className="text-sm text-brand-primary font-semibold">{formattedDate}</p>
-                            )}
+                            <div className="flex flex-wrap items-center gap-3">
+                                {isEditing ? (
+                                    <>
+                                        <input type="date" value={localMeeting.date} onChange={e => handleFieldChange('date', e.target.value)} className="text-sm p-1 border rounded-md border-gray-300 dark:border-gray-400 bg-white dark:bg-white text-gray-900 dark:text-gray-900 dark:[color-scheme:light]" />
+                                        <input type="time" value={localMeeting.startTime} onChange={e => handleFieldChange('startTime', e.target.value)} className="text-sm p-1 border rounded-md border-gray-300 dark:border-gray-400 bg-white dark:bg-white text-gray-900 dark:text-gray-900 dark:[color-scheme:light]" />
+                                        <input type="time" value={localMeeting.endTime} onChange={e => handleFieldChange('endTime', e.target.value)} className="text-sm p-1 border rounded-md border-gray-300 dark:border-gray-400 bg-white dark:bg-white text-gray-900 dark:text-gray-900 dark:[color-scheme:light]" />
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-brand-primary font-semibold">{formattedDate}</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">Horario: {formattedTimeRange}</p>
+                                    </>
+                                )}
+                            </div>
                             <h2 className="text-2xl font-bold text-gray-800 dark:text-white mt-1">Detalles de la Reunión</h2>
                             {isEditing ? (
                                 <select value={localMeeting.requirementId} onChange={e => handleFieldChange('requirementId', e.target.value)} className="w-full mt-1 p-1 border rounded-md border-gray-300 dark:border-gray-400 bg-white dark:bg-white text-gray-900 dark:text-gray-900">
@@ -293,6 +336,51 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                             {/* Column 1 */}
                             <div className="space-y-6 flex flex-col">
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Visibilidad</h4>
+                                    <div className="flex flex-wrap gap-3">
+                                        <label className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200">
+                                            <input
+                                                type="radio"
+                                                name="visibility"
+                                                value="public"
+                                                checked={localMeeting.visibility === 'public'}
+                                                onChange={() => handleFieldChange('visibility', 'public')}
+                                            />
+                                            <span>Pública (todos)</span>
+                                        </label>
+                                        <label className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200">
+                                            <input
+                                                type="radio"
+                                                name="visibility"
+                                                value="private"
+                                                checked={localMeeting.visibility === 'private'}
+                                                onChange={() => handleFieldChange('visibility', 'private')}
+                                            />
+                                            <span>Privada (solo seleccionados)</span>
+                                        </label>
+                                    </div>
+                                    {localMeeting.visibility === 'private' && (
+                                        <div className="border rounded-md p-2 max-h-36 overflow-y-auto dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+                                            {approvedUsers.length === 0 && (
+                                                <p className="text-xs text-gray-500">No hay usuarios aprobados.</p>
+                                            )}
+                                            {approvedUsers.map(u => (
+                                                <label key={u.docId} className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200 py-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={localMeeting.allowedUserIds.includes(u.docId)}
+                                                        onChange={() => toggleAllowedUser(u.docId)}
+                                                    />
+                                                    <span>{u.displayName || u.email}</span>
+                                                </label>
+                                            ))}
+                                            {localMeeting.visibility === 'private' && localMeeting.allowedUserIds.length === 0 && approvedUsers.length > 0 && (
+                                                <p className="text-xs text-red-500 mt-1">Selecciona al menos un usuario.</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                                 <div>
                                     <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Resumen</h4>
                                     <textarea value={localMeeting.summary} onChange={(e) => handleFieldChange('summary', e.target.value)} rows={5} className="w-full text-sm p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200" />
@@ -330,6 +418,21 @@ export const MeetingDetailsModal: React.FC<MeetingDetailsModalProps> = ({ isOpen
                     ) : (
                         <div className="space-y-4">
                             <DetailSection title="Resumen">{localMeeting.summary}</DetailSection>
+                            <DetailSection title="Acceso">
+                                <p className="text-sm text-gray-700 dark:text-gray-200">
+                                    Visibilidad: <strong>{visibilityLabel}</strong>
+                                </p>
+                                {localMeeting.visibility === 'private' && (
+                                    <ul className="list-disc pl-5 mt-1 space-y-1">
+                                        {allowedUsersNames.length === 0 ? (
+                                            <li className="text-xs text-gray-500">Sin usuarios seleccionados</li>
+                                        ) : (
+                                            allowedUsersNames.map(name => <li key={name} className="text-sm">{name}</li>)
+                                        )}
+                                    </ul>
+                                )}
+                            </DetailSection>
+                            <DetailSection title="Horario">{formattedTimeRange}</DetailSection>
                             <DetailSection title="Acciones Analizadas">
                                 <ul className="list-disc pl-5 space-y-1">
                                     {localMeeting.actionsAnalyzed.map((action, i) => <li key={i} className="whitespace-pre-line">{action}</li>)}

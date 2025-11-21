@@ -62,6 +62,16 @@ const statusColor = (status: string) => {
     return '#6366f1';
 };
 
+const getMeetingEndTimestamp = (meeting: Meeting) => {
+    const time = meeting.endTime || '23:59';
+    const parsed = meeting.date ? new Date(`${meeting.date}T${time}`) : new Date(NaN);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
+const getMeetingTimeRange = (meeting: Meeting) => meeting.startTime && meeting.endTime
+    ? `${meeting.startTime} - ${meeting.endTime}`
+    : 'Hora no registrada';
+
 export const MobileAppView: React.FC<MobileAppViewProps> = ({
     userName,
     tasks,
@@ -106,7 +116,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
 
     const upcomingMeetings = useMemo(() => {
         return [...meetings]
-            .sort((a, b) => (a.date > b.date ? 1 : -1))
+            .sort((a, b) => getMeetingEndTimestamp(a) - getMeetingEndTimestamp(b))
             .slice(0, 5);
     }, [meetings]);
 
@@ -185,19 +195,26 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                     <p className="text-sm text-gray-500">No hay reuniones agendadas.</p>
                 ) : (
                     <div className="space-y-3">
-                        {upcomingMeetings.map(meeting => (
-                            <button
-                                key={meeting.id}
-                                onClick={() => onOpenMeetingDetails(meeting)}
-                                className="w-full text-left bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-gray-900/60 dark:to-gray-900/20 rounded-xl p-3 border border-indigo-100 dark:border-gray-700"
-                            >
-                                <p className="text-xs text-indigo-600 dark:text-indigo-300 flex items-center gap-2 font-semibold">
-                                    <CalendarIcon className="w-4 h-4" /> {formatDate(meeting.date)}
-                                </p>
-                                <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">{meeting.requirementName}</p>
-                                <p className="text-xs text-gray-500">{limitText(meeting.summary, 80)}</p>
-                            </button>
-                        ))}
+                {upcomingMeetings.map(meeting => {
+                    const isPrivate = (meeting.visibility || 'public') === 'private';
+                    const gradient = isPrivate
+                        ? 'from-emerald-50 to-green-50 dark:from-emerald-900/60 dark:to-emerald-900/20 border-emerald-100 dark:border-emerald-800'
+                        : 'from-indigo-50 to-blue-50 dark:from-gray-900/60 dark:to-gray-900/20 border-indigo-100 dark:border-gray-700';
+                    return (
+                    <button
+                        key={meeting.id}
+                        onClick={() => onOpenMeetingDetails(meeting)}
+                        className={`w-full text-left bg-gradient-to-r rounded-xl p-3 border ${gradient}`}
+                    >
+                        <p className="text-xs text-indigo-600 dark:text-indigo-300 flex items-center gap-2 font-semibold">
+                            <CalendarIcon className="w-4 h-4" /> {formatDate(meeting.date)}
+                        </p>
+                        <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">{meeting.requirementName}</p>
+                        <p className="text-xs text-gray-500">{getMeetingTimeRange(meeting)}</p>
+                        <p className="text-xs text-gray-500">{limitText(meeting.summary, 80)}</p>
+                    </button>
+                );
+                })}
                     </div>
                 )}
             </div>
@@ -297,19 +314,24 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                 <p className="text-sm text-gray-500">Sin reuniones registradas todavía.</p>
             ) : (
                 meetings
-                    .sort((a, b) => (a.date > b.date ? -1 : 1))
+                    .sort((a, b) => getMeetingEndTimestamp(b) - getMeetingEndTimestamp(a))
                     .slice(0, 20)
-                    .map(meeting => (
+                    .map(meeting => {
+                        const isPrivate = (meeting.visibility || 'public') === 'private';
+                        const base = isPrivate ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700';
+                        return (
                         <button
                             key={meeting.id}
                             onClick={() => onOpenMeetingDetails(meeting)}
-                            className="w-full text-left bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-3 space-y-1 border border-gray-100 dark:border-gray-700"
+                            className={`w-full text-left rounded-2xl shadow-sm p-3 space-y-1 border ${base}`}
                         >
                             <p className="text-xs uppercase text-gray-500">{formatDate(meeting.date)}</p>
                             <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{meeting.requirementName}</p>
+                            <p className="text-xs text-gray-500">{getMeetingTimeRange(meeting)}</p>
                             <p className="text-xs text-gray-500">{limitText(meeting.summary, 100)}</p>
                         </button>
-                    ))
+                        );
+                    })
             )}
         </div>
     );
